@@ -1,50 +1,92 @@
 https://www.peptidego.dev/
 
-# PeptideGo 🧬
-**AI Search Agent for Peptide Brand Reputation Monitoring**
+# SuppGo 🧬
+**AI Search Agent for Supplement Brand Visibility + Product Truth Monitoring**
 
 > *2nd Place Winner at Pulse NYC Hackathon Vol. 3*
 
 ---
 
-## 🎯 Problem Statement
+## 🌍 Vision
 
-As search evolves from traditional blue links to AI-generated answers (SearchGPT, Perplexity), peptide brands face a critical challenge: **they have no visibility into what AI models are actually saying about their products**.
+**SuppGo’s vision is to become the infrastructure that determines which brands get recommended by AI when people ask what to buy for their health.**
 
-Traditional SEO tools track keyword rankings in Google. But what happens when ChatGPT thinks your peptide is only for hair loss when you also offer skin and acne solutions? **What happens when an LLM hallucinates claims about your brand?**
+As AI replaces traditional search and increasingly guides consumer decisions, SuppGo ensures companies are accurately understood, trusted, and recommended by generative systems.
 
-PeptideGo solves this by providing:
-- **Real-time AI model analysis** of your brand representation
-- **Gap detection** across peptide categories (hair, skin, acne)
-- **Actionable recommendations** to improve visibility and accuracy in LLM outputs
+In simple terms:
+
+👉 **We help brands win in the AI-driven discovery economy.**
 
 ---
 
-## 💡 The Solution: PeptideGo
+## 🧠 Core Thesis
 
-An **AI-powered agentic workflow** that monitors and optimizes your brand's presence in AI-generated search results.
+**Generative AI is becoming the primary decision layer for product discovery, and brands that are not optimized for AI interpretation will lose visibility, trust, and revenue.**
+
+Historically:
+- SEO determined who ranked in search.
+
+Now:
+- AI reasoning determines who gets recommended.
+
+Brands cannot directly control AI outputs, but they *can* control the signals AI uses to evaluate them.
+
+**SuppGo exists to measure, diagnose, and optimize those signals.**
+
+---
+
+## 🎯 Problem Statement
+
+As search evolves from traditional blue links to AI-generated answers (ChatGPT-style search, Perplexity-style experiences, AI summaries), supplement brands face a critical challenge:
+
+**they have no visibility into what AI models are actually saying about their products — or whether it’s accurate.**
+
+Traditional SEO tools track keyword rankings in Google. But what happens when:
+- an AI claims your supplement is “unsafe” due to bad sourcing assumptions,
+- it confuses your product category or intended use,
+- it attributes a competitor’s differentiators to you (or vice versa),
+- or it hallucinates claims about your ingredients, dosing, or compliance?
+
+**This is a brand visibility + product truth problem.**
+
+SuppGo solves this by providing:
+- **AI model analysis** of your brand representation
+- **Gap detection** across supplement use-cases (sleep, stress, gut, cognition, performance, skin, recovery, etc.)
+- **Actionable AEO/GEO recommendations** to improve visibility and accuracy in AI outputs
+
+---
+
+## 💡 The Solution: SuppGo
+
+An **AI-powered agentic workflow** that monitors and optimizes your brand's presence in AI-generated search and recommendation experiences.
 
 ### How It Works
 
 1. **Ground Truth Collection**
    - Scrapes and analyzes your official brand website
-   - Identifies key claims, products, and differentiators
+   - Identifies key claims, products, positioning, and differentiators
    - Generates semantic embeddings for comparison
 
 2. **LLM Probing**
-   - Submits curated user-persona queries to SearchGPT, Perplexity, and other LLM engines
-   - Captures model responses across peptide categories (hair, skin, acne, muscle)
-   - Example queries: *"Best peptide for skin health?"*, *"How do peptides help with acne?"*
+   - Submits curated user-intent queries to multiple LLM/search engines
+   - Captures responses across supplement use-cases
+   - Example queries:
+     - *"What’s the best supplement for sleep and why?"*
+     - *"Is [Brand] third-party tested?"*
+     - *"Is [Ingredient] safe and effective?"*
 
-3. **Gap Analysis**
-   - Compares LLM outputs against ground truth using **cosine similarity** embeddings
-   - Identifies hallucinations, missing information, and inaccuracies
-   - Highlights content opportunities
+3. **Gap Analysis (Visibility + Truth)**
+   - Compares AI outputs against your ground truth using **cosine similarity** embeddings
+   - Flags:
+     - missing coverage (you’re not mentioned where you should be)
+     - misrepresentation (wrong positioning, wrong product category)
+     - hallucinations (unsupported claims)
+     - citation weaknesses (low-quality or irrelevant sources being used)
 
-4. **GEO Strategy Recommendations**
-   - Programmatically generates **"Generative Engine Optimization" (GEO)** strategies
-   - Suggests specific content additions to fix identified gaps
-   - Prioritizes by impact and relevance
+4. **AEO/GEO Strategy Recommendations**
+   - Programmatically generates **AEO/GEO** (“Answer/Generative Engine Optimization”) strategies
+   - Suggests specific content additions and signal improvements to fix gaps
+   - Prioritizes by expected impact and relevance
 
 ---
 
@@ -66,12 +108,19 @@ An **AI-powered agentic workflow** that monitors and optimizes your brand's pres
 
 ✅ **Multi-step agentic workflow** using LangChain  
 ✅ **Semantic gap analysis** via embeddings and cosine similarity  
-✅ **Domain-specific** for peptide industry (but extensible to other verticals)  
-✅ **Real-time LLM probing** across SearchGPT, Perplexity, ChatGPT  
+✅ **Domain-specific** for supplements (extensible to other regulated consumer health verticals)  
+✅ **Real-time LLM probing** across AI search experiences  
 ✅ **Actionable recommendations** ranked by impact  
 ✅ **Built in 6 hours** for hackathon constraints  
 
 ---
+
+## 🚀 Quick Start
+
+### Prerequisites
+```bash
+python >= 3.9
+pip
 
 ## 🚀 Quick Start
 
@@ -105,7 +154,7 @@ Achieved:
 - End-to-end MVP from input URL → strategic action items
 - Multi-step agentic workflow with LangChain
 - Semantic gap detection via embeddings
-- Domain-specific insights for peptide market
+- Domain-specific insights for supplement market
 - Novel "GEO" framework for AI search optimization
 
 ---
