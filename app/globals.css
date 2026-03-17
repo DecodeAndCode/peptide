@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --sage: #7a9e87;
+  --sage-light: #a8c5b0;
+  --cream: #f7f4ef;
+  --dark: #1e2620;
+  --mid: #4a5c50;
+  --accent: #c8a96e;
+  --white: #ffffff;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+@layer base {
+  body {
+    @apply bg-cream text-dark;
+  }
+
+  a {
+    @apply text-inherit no-underline;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-pill border border-transparent bg-sage px-6 py-2.5 text-sm font-medium text-white transition-all duration-200 hover:-translate-y-1 hover:bg-dark;
+  }
+
+  .btn-outline {
+    @apply inline-flex items-center justify-center rounded-pill border border-sage bg-transparent px-6 py-2.5 text-sm font-medium text-sage transition-all duration-200 hover:-translate-y-1 hover:bg-sage hover:text-white;
+  }
+
+  .marketing-card {
+    @apply rounded-card border bg-white shadow-card;
+    border-color: rgba(122, 158, 135, 0.1);
+  }
+
+  .dark-glass-card {
+    @apply rounded-card border backdrop-blur-sm;
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .gold-card {
+    background: rgba(200, 169, 110, 0.07);
+    border-color: rgba(200, 169, 110, 0.2);
+  }
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition:
+    opacity 0.6s ease,
+    transform 0.6s ease;
+}
+
+.reveal.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.bar-fill {
+  width: 0;
+  animation: grow 1.5s ease-out forwards;
+  animation-delay: var(--delay, 0s);
+}
+
+@keyframes grow {
+  to {
+    width: var(--target-width);
+  }
+}
+
+@keyframes float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .reveal,
+  .bar-fill,
+  [data-float] {
+    animation: none !important;
+    transition: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
