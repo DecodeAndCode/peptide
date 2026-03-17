@@ -10,11 +10,19 @@ export function createClient() {
       get(name) {
         return cookieStore.get(name)?.value;
       },
-      set() {
-        // Cookie writes belong in middleware and route handlers.
+      set(name, value, options) {
+        try {
+          cookieStore.set({ name, value, ...options });
+        } catch {
+          // Server components cannot always mutate cookies, but server actions can.
+        }
       },
-      remove() {
-        // Cookie writes belong in middleware and route handlers.
+      remove(name, options) {
+        try {
+          cookieStore.set({ name, value: "", ...options, maxAge: 0 });
+        } catch {
+          // Server components cannot always mutate cookies, but server actions can.
+        }
       },
     },
   });

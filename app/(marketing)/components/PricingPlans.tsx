@@ -1,49 +1,7 @@
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Reveal } from "@/components/ui/Reveal";
-import type { MarketingPlan } from "@/types";
-
-const plans: MarketingPlan[] = [
-  {
-    name: "Starter",
-    price: "$49",
-    period: "per month",
-    features: [
-      "Monthly analysis cycle",
-      "GPT-4o monitoring",
-      "50 prompts per cycle",
-      "Cycle report delivered to inbox",
-      "Dashboard access",
-    ],
-  },
-  {
-    name: "Growth",
-    price: "$149",
-    period: "per month",
-    featured: true,
-    features: [
-      "Bi-weekly analysis cycles",
-      "GPT-4o and Claude monitoring",
-      "150 prompts per cycle",
-      "Competitor benchmarking",
-      "Content opportunity generation",
-      "Full dashboard access",
-    ],
-  },
-  {
-    name: "Pro",
-    price: "$349",
-    period: "per month",
-    features: [
-      "Weekly analysis cycles",
-      "GPT-4o, Claude, and Perplexity",
-      "400+ prompts per cycle",
-      "Influencer matching module",
-      "Perplexity-grounded citation data",
-      "Advanced insight metrics",
-    ],
-  },
-];
+import { SUBSCRIPTION_PLANS } from "@/lib/suppgo";
 
 export function PricingPlans() {
   return (
@@ -61,7 +19,7 @@ export function PricingPlans() {
         </p>
 
         <div className="grid gap-6 md:grid-cols-3">
-          {plans.map((plan) => {
+          {SUBSCRIPTION_PLANS.map((plan) => {
             const content = (
               <>
                 <div
@@ -90,6 +48,16 @@ export function PricingPlans() {
                   {plan.period}
                 </div>
 
+                <p
+                  className={
+                    plan.featured
+                      ? "mb-6 text-sm leading-6 text-white/78"
+                      : "mb-6 text-sm leading-6 text-mid"
+                  }
+                >
+                  {plan.description}
+                </p>
+
                 <ul className="mb-8 flex list-none flex-col gap-2.5">
                   {plan.features.map((feature) => (
                     <li
@@ -106,7 +74,7 @@ export function PricingPlans() {
                 </ul>
 
                 <Button
-                  href="#plans"
+                  href={`/signup?plan=${plan.tier}`}
                   className={
                     plan.featured
                       ? "w-full bg-white text-sage hover:bg-dark hover:text-white"

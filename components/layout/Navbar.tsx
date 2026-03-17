@@ -28,8 +28,14 @@ export function Navbar() {
             </a>
           ))}
 
-          <Button href="#plans" className="px-6 py-2.5">
-            Get started
+          <a
+            href="/login"
+            className="hidden text-sm font-medium tracking-[0.3px] text-mid transition-colors duration-200 hover:text-dark md:inline"
+          >
+            Sign in
+          </a>
+          <Button href="/signup" className="px-6 py-2.5">
+            Start free trial
           </Button>
         </div>
       </div>

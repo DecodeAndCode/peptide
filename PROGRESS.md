@@ -4,9 +4,9 @@
 - [x] Step 1: Scaffolding
 - [x] Step 2: Marketing page
 - [x] Step 3: Supabase schema + RLS
-- [ ] Step 4: Auth flows
-- [ ] Step 5: Onboarding wizard
-- [ ] Step 6: Dashboard shell
+- [x] Step 4: Auth flows
+- [x] Step 5: Onboarding wizard
+- [x] Step 6: Dashboard shell
 - [ ] Step 7: LLM query engine
 - [ ] Step 8: Prompt engine + brand scorer
 - [ ] Step 9: Cycle runner
@@ -26,4 +26,4 @@
 - Supabase CLI not yet configured — migrations applied manually for now
 
 ## Next session starting point
-Step 4 — Auth flows (Session 2: Steps 4–6)
+Step 7 — LLM query engine

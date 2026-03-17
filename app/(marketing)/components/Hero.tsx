@@ -32,9 +32,9 @@ export function Hero() {
             the time.
           </p>
           <div className="flex flex-wrap items-center gap-4">
-            <Button href="#plans">Start free trial</Button>
-            <Button href="#how-it-works" variant="outline">
-              See how it works
+            <Button href="/signup">Start free trial</Button>
+            <Button href="/login" variant="outline">
+              Sign in
             </Button>
           </div>
         </div>
