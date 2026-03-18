@@ -23,6 +23,15 @@
 - Perplexity citation URLs are stored in a new `prompts.citation_urls`
   column via a follow-up migration so they remain queryable separately
   from raw response text
+- brand_aliases column added to brands table for 
+  multi-name brand matching
+- Curated competitor catalog expanded to 150+ brands
+- Claude Haiku secondary extraction pass added to 
+  brand-scorer.ts for complete competitor capture
+- Haiku model string updated to claude-haiku-4-5-20251001
+- Prompt engine: 20% hero injection, crawler-signal 
+  weighting, tier-based category depth all implemented
+- model_refused added as valid sentiment classification
 
 ## Known issues / TODOs
 - Supabase CLI not yet configured — migrations applied manually for now
