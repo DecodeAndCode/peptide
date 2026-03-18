@@ -16,6 +16,7 @@ interface OnboardingWizardProps {
 
 interface ProfilePayload {
   brandName: string;
+  brandAliases: string[];
   websiteUrl: string;
   industryTags: string[];
   competitorUrls: string[];
@@ -50,6 +51,21 @@ function getInitialCompetitors(brand: Pick<BrandRecord, "competitor_urls"> | nul
   return [...existing, ...Array.from({ length: Math.max(0, 5 - existing.length) }, () => "")].slice(0, 5);
 }
 
+function parseAliasInput(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .split(/[\n,]/)
+        .map((entry) => entry.trim())
+        .filter(Boolean),
+    ),
+  ).slice(0, 12);
+}
+
+function mergeAliases(existing: string[], suggested: string[]) {
+  return Array.from(new Set([...existing, ...suggested].map((value) => value.trim()).filter(Boolean))).slice(0, 12);
+}
+
 export function OnboardingWizard({
   initialBrand,
   initialAnalysis,
@@ -59,6 +75,7 @@ export function OnboardingWizard({
   const [step, setStep] = useState<WizardStep>(1);
   const [profile, setProfile] = useState<ProfilePayload>({
     brandName: initialBrand?.brand_name ?? "",
+    brandAliases: initialBrand?.brand_aliases ?? [],
     websiteUrl: initialBrand?.website_url ?? "",
     industryTags: initialBrand?.industry_tags ?? [],
     competitorUrls: getInitialCompetitors(initialBrand),
@@ -67,6 +84,7 @@ export function OnboardingWizard({
     initialBrand
       ? {
           brandName: initialBrand.brand_name,
+          brandAliases: initialBrand.brand_aliases ?? [],
           websiteUrl: initialBrand.website_url,
           industryTags: initialBrand.industry_tags,
           competitorUrls: getInitialCompetitors(initialBrand),
@@ -118,6 +136,7 @@ export function OnboardingWizard({
       },
       body: JSON.stringify({
         brandName: profile.brandName.trim(),
+        brandAliases: profile.brandAliases,
         websiteUrl: profile.websiteUrl.trim(),
         industryTags: profile.industryTags,
         competitorUrls,
@@ -155,6 +174,7 @@ export function OnboardingWizard({
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        brandName: profile.brandName.trim(),
         websiteUrl: profile.websiteUrl.trim(),
         industryTags: profile.industryTags,
       }),
@@ -171,7 +191,13 @@ export function OnboardingWizard({
       return;
     }
 
-    setAnalysis(result.analysis);
+    const analysisRecord = result.analysis;
+
+    setAnalysis(analysisRecord);
+    setProfile((current) => ({
+      ...current,
+      brandAliases: mergeAliases(current.brandAliases, analysisRecord.content_signals?.brandAliases ?? []),
+    }));
   }
 
   async function startTrial() {
@@ -288,6 +314,29 @@ export function OnboardingWizard({
                       className="w-full rounded-card border border-sage/20 bg-white px-4 py-3 text-dark outline-none transition-colors duration-200 focus:border-sage"
                     />
                   </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label htmlFor="brandAliases" className="text-sm font-medium text-dark">
+                    Also known as
+                  </label>
+                  <textarea
+                    id="brandAliases"
+                    rows={4}
+                    value={profile.brandAliases.join("\n")}
+                    onChange={(event) =>
+                      setProfile((current) => ({
+                        ...current,
+                        brandAliases: parseAliasInput(event.target.value),
+                      }))
+                    }
+                    placeholder={"Athletic Greens\nAG1 Daily"}
+                    className="w-full rounded-card border border-sage/20 bg-white px-4 py-3 text-dark outline-none transition-colors duration-200 focus:border-sage"
+                  />
+                  <p className="text-sm leading-6 text-mid">
+                    Optional former names, hero product names, or common abbreviations that models may use instead
+                    of your primary brand name.
+                  </p>
                 </div>
 
                 <div className="space-y-3">
@@ -415,6 +464,13 @@ export function OnboardingWizard({
                     </div>
 
                     <div className="grid gap-4 md:grid-cols-2">
+                      <div className="rounded-card border border-sage/12 bg-sage/5 p-4">
+                        <div className="text-sm font-medium text-dark">Suggested aliases</div>
+                        <p className="mt-2 text-sm leading-6 text-mid">
+                          {(analysis.content_signals?.brandAliases ?? []).join(", ") ||
+                            "No alternate naming signals were detected on the site."}
+                        </p>
+                      </div>
                       <div className="rounded-card border border-sage/12 bg-sage/5 p-4">
                         <div className="text-sm font-medium text-dark">Product signals</div>
                         <p className="mt-2 text-sm leading-6 text-mid">
@@ -574,6 +630,10 @@ export function OnboardingWizard({
               <div>
                 <div className="font-medium text-dark">Website</div>
                 <div>{profile.websiteUrl || "Not set yet"}</div>
+              </div>
+              <div>
+                <div className="font-medium text-dark">Aliases</div>
+                <div>{profile.brandAliases.join(", ") || "None added yet"}</div>
               </div>
               <div>
                 <div className="font-medium text-dark">Plan</div>

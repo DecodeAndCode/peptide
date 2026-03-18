@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 
 const onboardingProfileSchema = z.object({
   brandName: z.string().trim().min(2).max(120),
+  brandAliases: z.array(z.string().trim().min(1).max(120)).max(12).default([]),
   websiteUrl: z.url(),
   industryTags: z.array(z.string().trim().min(1)).min(1).max(12),
   competitorUrls: z.array(z.url()).max(5),
@@ -29,6 +30,7 @@ export async function POST(request: Request) {
   const payload = {
     user_id: user.id,
     brand_name: parsed.data.brandName,
+    brand_aliases: parsed.data.brandAliases,
     website_url: parsed.data.websiteUrl,
     industry_tags: parsed.data.industryTags,
     competitor_urls: parsed.data.competitorUrls,

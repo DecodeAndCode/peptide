@@ -4,6 +4,7 @@ import { analyzeSite } from "@/lib/analysis/site-crawler";
 import { createClient } from "@/lib/supabase/server";
 
 const analyzeSiteSchema = z.object({
+  brandName: z.string().trim().min(2).max(120),
   websiteUrl: z.url(),
   industryTags: z.array(z.string().trim().min(1)).min(1).max(12),
 });
@@ -38,7 +39,11 @@ export async function POST(request: Request) {
   }
 
   try {
-    const analysis = await analyzeSite(parsed.data.websiteUrl, parsed.data.industryTags);
+    const analysis = await analyzeSite(
+      parsed.data.websiteUrl,
+      parsed.data.industryTags,
+      parsed.data.brandName,
+    );
     const { data, error } = await supabase
       .from("site_analyses")
       .insert({

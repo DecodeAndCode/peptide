@@ -1,4 +1,4 @@
-import type { IndustryOption, MarketingPlan } from "@/types";
+import type { IndustryOption, MarketingPlan, PromptCategory, PromptModel, SubscriptionTier } from "@/types";
 
 export const INDUSTRY_OPTIONS: IndustryOption[] = [
   { label: "Vitamins & Minerals", value: "vitamins_minerals" },
@@ -63,6 +63,56 @@ export const SUBSCRIPTION_PLANS: MarketingPlan[] = [
   },
 ];
 
+export interface TierAnalysisConfig {
+  tier: SubscriptionTier;
+  promptTemplatesPerCycle: number;
+  models: PromptModel[];
+  competitorBenchmarking: boolean;
+  productInteractionContent: boolean;
+  influencerMatching: boolean;
+}
+
+export const TIER_ANALYSIS_CONFIG: Record<SubscriptionTier, TierAnalysisConfig> = {
+  starter: {
+    tier: "starter",
+    promptTemplatesPerCycle: 50,
+    models: ["gpt-4o"],
+    competitorBenchmarking: false,
+    productInteractionContent: false,
+    influencerMatching: false,
+  },
+  growth: {
+    tier: "growth",
+    promptTemplatesPerCycle: 150,
+    models: ["gpt-4o", "claude-sonnet"],
+    competitorBenchmarking: true,
+    productInteractionContent: true,
+    influencerMatching: false,
+  },
+  pro: {
+    tier: "pro",
+    promptTemplatesPerCycle: 420,
+    models: ["gpt-4o", "claude-sonnet", "perplexity-sonar-pro"],
+    competitorBenchmarking: true,
+    productInteractionContent: true,
+    influencerMatching: true,
+  },
+};
+
+export const PROMPT_CATEGORY_LABELS: Record<PromptCategory, string> = {
+  explicit_recommendation: "Explicit Recommendation",
+  problem_solution: "Problem Solution",
+  ingredient_education: "Ingredient Education",
+  product_interaction: "Product Interaction",
+};
+
+export const PROMPT_CATEGORY_WEIGHTS: Record<PromptCategory, number> = {
+  explicit_recommendation: 1,
+  problem_solution: 1,
+  ingredient_education: 0.75,
+  product_interaction: 0.8,
+};
+
 export const INDUSTRY_GAP_KEYWORDS: Record<string, string[]> = {
   vitamins_minerals: ["vitamin", "mineral", "magnesium", "vitamin d", "multivitamin"],
   protein_performance: ["protein", "creatine", "pre-workout", "recovery", "performance"],
@@ -84,4 +134,8 @@ export function getIndustryLabel(value: string) {
 
 export function getSubscriptionPlan(tier: MarketingPlan["tier"]) {
   return SUBSCRIPTION_PLANS.find((plan) => plan.tier === tier) ?? SUBSCRIPTION_PLANS[0];
+}
+
+export function getTierAnalysisConfig(tier: SubscriptionTier) {
+  return TIER_ANALYSIS_CONFIG[tier];
 }

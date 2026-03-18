@@ -1,7 +1,9 @@
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { TriggerCycleButton } from "@/components/dashboard/TriggerCycleButton";
 import { getDashboardContext } from "@/lib/brands";
 import { getSubscriptionPlan } from "@/lib/suppgo";
+import { isSuppgoTestModeEnabled } from "@/lib/supabase/env";
 
 export default async function DashboardPage() {
   const context = await getDashboardContext();
@@ -11,6 +13,7 @@ export default async function DashboardPage() {
   }
 
   const plan = getSubscriptionPlan(context.brand.subscription_tier);
+  const testModeEnabled = isSuppgoTestModeEnabled();
 
   return (
     <div className="space-y-6">
@@ -52,6 +55,29 @@ export default async function DashboardPage() {
           </div>
         </Card>
       </div>
+
+      <Card className="p-6 md:p-8">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
+            Cycle runner
+          </div>
+          <Badge variant={testModeEnabled ? "gold" : "dark"}>
+            {testModeEnabled ? "Test mode cap active" : "Full tier limits active"}
+          </Badge>
+        </div>
+        <h3 className="mt-2 font-display text-2xl text-dark">Run the first end-to-end visibility cycle.</h3>
+        <p className="mt-4 max-w-2xl text-sm leading-7 text-mid">
+          This manual trigger runs the prompt library against the models allowed for your tier,
+          scores brand mentions, and stores the resulting cycle plus prompt records in Supabase.
+        </p>
+        <div className="mt-6">
+          <TriggerCycleButton />
+        </div>
+        <p className="mt-4 text-xs leading-6 text-mid">
+          When test mode is enabled, the runner trims the cycle before any model call so the total
+          prompt executions never exceed ten across all enabled models.
+        </p>
+      </Card>
 
       <div className="grid gap-6 md:grid-cols-3">
         <Card className="p-6">

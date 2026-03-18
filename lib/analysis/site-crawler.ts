@@ -20,6 +20,10 @@ export interface SiteAnalysisResult {
 
 const PAGE_HINTS = ["product", "shop", "faq", "blog", "about", "science", "learn", "ingredient"];
 
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function normalizeUrl(value: string) {
   return value.endsWith("/") ? value.slice(0, -1) : value;
 }
@@ -41,6 +45,27 @@ function extractCleanText($: cheerio.CheerioAPI) {
 
 function dedupe(items: string[], limit = 12) {
   return Array.from(new Set(items.map((item) => item.trim()).filter(Boolean))).slice(0, limit);
+}
+
+function normalizeDisplayName(value: string) {
+  return value
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .map((part) =>
+      /^[A-Z0-9&+.-]+$/.test(part) ? part : part.charAt(0).toUpperCase() + part.slice(1).toLowerCase(),
+    )
+    .join(" ");
+}
+
+function extractDomainName(url: string) {
+  try {
+    const host = new URL(url).hostname.replace(/^www\./, "");
+    return host.split(".")[0] ?? "";
+  } catch {
+    return "";
+  }
 }
 
 function extractTopicKeywords(text: string) {
@@ -104,6 +129,48 @@ function extractSignalsFromPage(page: CrawledPage) {
       /__next|application\/json|hydration|webpack|bundle/i.test(page.html) &&
       text.length < 900,
   };
+}
+
+function extractBrandAliases({
+  brandName,
+  websiteUrl,
+  pages,
+  llmsTxtContent,
+}: {
+  brandName: string;
+  websiteUrl: string;
+  pages: CrawledPage[];
+  llmsTxtContent: string | null;
+}) {
+  const escapedBrandName = escapeRegExp(brandName);
+  const domainCandidate = normalizeDisplayName(extractDomainName(websiteUrl));
+  const normalizedPrimaryBrand = brandName.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const combinedText = [llmsTxtContent ?? "", ...pages.map((page) => cheerio.load(page.html)("body").text())].join(
+    "\n",
+  );
+  const aliasMatches = [
+    ...combinedText.matchAll(
+      new RegExp(`${escapedBrandName}\\s*(?:,|\\()\\s*(?:formerly known as|formerly|by)\\s+([^)\\n,.]{2,60})`, "gi"),
+    ),
+    ...combinedText.matchAll(
+      new RegExp(`([A-Z][A-Za-z0-9&+.'’\\- ]{1,60})\\s+(?:rebranded as|is now|now called)\\s+${escapedBrandName}`, "gi"),
+    ),
+    ...combinedText.matchAll(
+      new RegExp(`${escapedBrandName}\\s*[-:]\\s*formerly\\s+([A-Z][A-Za-z0-9&+.'’\\- ]{1,60})`, "gi"),
+    ),
+  ]
+    .map((match) => normalizeDisplayName(match[1] ?? ""))
+    .filter(Boolean);
+
+  return dedupe(
+    [domainCandidate, ...aliasMatches].filter(
+      (candidate) =>
+        candidate.toLowerCase() !== brandName.toLowerCase() &&
+        candidate.length >= 2 &&
+        !candidate.toLowerCase().replace(/[^a-z0-9]/g, "").includes(normalizedPrimaryBrand),
+    ),
+    8,
+  );
 }
 
 function detectMissingContentGaps(industryTags: string[], topicKeywords: string[]) {
@@ -205,7 +272,11 @@ async function collectPages(baseUrl: string) {
   return [homepage, ...internalPages.filter((page): page is CrawledPage => page !== null)];
 }
 
-export async function analyzeSite(url: string, industryTags: string[]): Promise<SiteAnalysisResult> {
+export async function analyzeSite(
+  url: string,
+  industryTags: string[],
+  brandName: string,
+): Promise<SiteAnalysisResult> {
   const normalizedUrl = normalizeUrl(url);
   const pages = await collectPages(normalizedUrl);
 
@@ -219,6 +290,12 @@ export async function analyzeSite(url: string, industryTags: string[]): Promise<
 
   const pageSignals = pages.map(extractSignalsFromPage);
   const contentSignals: SiteAnalysisContentSignals = {
+    brandAliases: extractBrandAliases({
+      brandName,
+      websiteUrl: normalizedUrl,
+      pages,
+      llmsTxtContent,
+    }),
     productNames: dedupe(pageSignals.flatMap((signal) => signal.productNames)),
     ingredients: dedupe(pageSignals.flatMap((signal) => signal.ingredients)),
     healthClaims: dedupe(pageSignals.flatMap((signal) => signal.healthClaims)),

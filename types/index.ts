@@ -1,6 +1,18 @@
 export type SubscriptionTier = "starter" | "growth" | "pro";
 export type SubscriptionStatus = "trial" | "active" | "cancelled";
 export type CycleStatus = "pending" | "running" | "complete" | "failed";
+export type PromptCategory =
+  | "explicit_recommendation"
+  | "problem_solution"
+  | "ingredient_education"
+  | "product_interaction";
+export type PromptModel = "gpt-4o" | "claude-sonnet" | "perplexity-sonar-pro";
+export type PromptSentiment =
+  | "positive"
+  | "neutral"
+  | "negative"
+  | "not_mentioned"
+  | "model_refused";
 
 export interface MarketingMetric {
   label: string;
@@ -22,6 +34,7 @@ export interface BrandRecord {
   id: string;
   user_id: string;
   brand_name: string;
+  brand_aliases: string[];
   website_url: string;
   industry_tags: string[];
   competitor_urls: string[];
@@ -47,7 +60,44 @@ export interface CycleRecord {
   created_at: string;
 }
 
+export interface PromptRecord {
+  id: string;
+  cycle_id: string;
+  brand_id: string;
+  prompt_text: string;
+  prompt_category: PromptCategory;
+  model: PromptModel;
+  raw_response: string;
+  citation_urls: string[];
+  brand_mentioned: boolean;
+  mention_rank: number | null;
+  mention_context: string | null;
+  competitors_mentioned: string[];
+  sentiment: PromptSentiment | null;
+  created_at: string;
+}
+
+export interface PromptDefinition {
+  promptText: string;
+  promptCategory: PromptCategory;
+}
+
+export interface PromptAnalysisResult {
+  promptText: string;
+  promptCategory: PromptCategory;
+  model: PromptModel;
+  rawResponse: string;
+  citationUrls: string[];
+  brandMentioned: boolean;
+  mentionRank: number | null;
+  mentionContext: string | null;
+  competitorsMentioned: string[];
+  sentiment: PromptSentiment;
+  visibilityScore: number;
+}
+
 export interface SiteAnalysisContentSignals {
+  brandAliases: string[];
   productNames: string[];
   ingredients: string[];
   healthClaims: string[];
@@ -67,6 +117,17 @@ export interface SiteAnalysisRecord {
   content_signals: SiteAnalysisContentSignals | null;
   missing_content_gaps: string[];
   recommendations: string[];
+}
+
+export interface CycleRunSummary {
+  cycleId: string;
+  cycleNumber: number;
+  totalPromptTemplates: number;
+  totalPromptExecutions: number;
+  modelsQueried: PromptModel[];
+  mentionCount: number;
+  visibilityScore: number;
+  testModeApplied: boolean;
 }
 
 export interface IndustryOption {
