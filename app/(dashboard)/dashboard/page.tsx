@@ -1,39 +1,106 @@
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { TriggerCycleButton } from "@/components/dashboard/TriggerCycleButton";
-import { getDashboardContext } from "@/lib/brands";
-import { getSubscriptionPlan } from "@/lib/suppgo";
+import { VisibilityGraph } from "@/components/dashboard/VisibilityGraph";
+import { getDashboardOverview } from "@/lib/dashboard";
+import { getSubscriptionPlan, getTierAnalysisConfig } from "@/lib/suppgo";
 import { isSuppgoTestModeEnabled } from "@/lib/supabase/env";
 
-export default async function DashboardPage() {
-  const context = await getDashboardContext();
+function formatDelta(value: number | null, suffix = "%") {
+  if (value === null) {
+    return "Baseline";
+  }
 
-  if (!context?.brand) {
+  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}${suffix}`;
+}
+
+export default async function DashboardPage() {
+  const overview = await getDashboardOverview();
+
+  if (!overview?.brand) {
     return null;
   }
 
-  const plan = getSubscriptionPlan(context.brand.subscription_tier);
+  const plan = getSubscriptionPlan(overview.brand.subscription_tier);
+  const tierConfig = getTierAnalysisConfig(overview.brand.subscription_tier);
   const testModeEnabled = isSuppgoTestModeEnabled();
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
+      <Card className="p-6 md:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
+              Overview
+            </div>
+            <h2 className="mt-2 font-display text-3xl text-dark">
+              Visibility intelligence for {overview.brand.brand_name}
+            </h2>
+            <p className="mt-4 max-w-3xl text-sm leading-7 text-mid">
+              The overview brings your current cycle performance, year-to-date visibility trend,
+              category hit rates, and the clearest competitive content opportunities into one scan.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Badge variant="gold">{plan.name}</Badge>
+            <Badge variant={testModeEnabled ? "gold" : "dark"}>
+              {testModeEnabled ? "Test mode cap active" : "Tier limits active"}
+            </Badge>
+          </div>
+        </div>
+      </Card>
+
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+        <Card className="p-6">
+          <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
+            Current visibility score
+          </div>
+          <div className="mt-4 font-display text-4xl text-dark">
+            {overview.metrics.currentVisibilityScore.toFixed(1)}
+          </div>
+          <p className="mt-3 text-sm leading-6 text-mid">0-100 visibility index for the latest completed cycle.</p>
+        </Card>
+        <Card className="p-6">
+          <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
+            Change vs. last cycle
+          </div>
+          <div className="mt-4 font-display text-4xl text-dark">
+            {formatDelta(overview.metrics.visibilityDelta, "")}
+          </div>
+          <p className="mt-3 text-sm leading-6 text-mid">How your aggregate visibility moved since the prior completed cycle.</p>
+        </Card>
+        <Card className="p-6">
+          <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
+            Total prompts analyzed
+          </div>
+          <div className="mt-4 font-display text-4xl text-dark">{overview.metrics.totalPromptsAnalyzed}</div>
+          <p className="mt-3 text-sm leading-6 text-mid">Prompt executions captured in the latest completed cycle.</p>
+        </Card>
+        <Card className="p-6">
+          <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
+            Mention rate
+          </div>
+          <div className="mt-4 font-display text-4xl text-dark">{overview.metrics.mentionRate.toFixed(1)}%</div>
+          <p className="mt-3 text-sm leading-6 text-mid">Share of prompt executions where the brand appeared in the answer.</p>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1.5fr_0.9fr]">
         <Card className="p-6 md:p-8">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
-                Overview
+                YTD visibility trend
               </div>
-              <h2 className="mt-2 font-display text-3xl text-dark">
-                Your workspace is ready for cycle data.
-              </h2>
-              <p className="mt-4 max-w-2xl text-sm leading-7 text-mid">
-                The authenticated shell, routing, and brand context are now in place. The
-                visibility scorecards, charts, and report analytics arrive in the next build
-                step once the cycle engine is connected.
-              </p>
+              <h3 className="mt-2 font-display text-2xl text-dark">Cross-model performance over time</h3>
             </div>
-            <Badge variant="gold">{plan.name} trial</Badge>
+            <Badge>{overview.latestCompletedCycle ? `Cycle #${overview.latestCompletedCycle.cycle_number}` : "Awaiting first cycle"}</Badge>
+          </div>
+          <div className="mt-6">
+            <VisibilityGraph
+              data={overview.trend}
+              showPlaceholderLabel={overview.hasPlaceholderTrend}
+            />
           </div>
         </Card>
 
@@ -41,68 +108,158 @@ export default async function DashboardPage() {
           <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
             Site readiness
           </div>
+          <h3 className="mt-2 font-display text-2xl text-dark">Crawler and profile context</h3>
           <div className="mt-4 space-y-3 text-sm leading-6 text-mid">
-            <p>Website: {context.brand.website_url}</p>
+            <p>Website: {overview.brand.website_url}</p>
             <p>
               Latest crawl:{" "}
-              {context.latestSiteAnalysis?.crawled_at
-                ? new Date(context.latestSiteAnalysis.crawled_at).toLocaleDateString()
+              {overview.latestSiteAnalysis?.crawled_at
+                ? new Date(overview.latestSiteAnalysis.crawled_at).toLocaleDateString()
                 : "Not yet analyzed"}
             </p>
-            <p>
-              Pages analyzed: {context.latestSiteAnalysis?.pages_analyzed ?? 0}
-            </p>
+            <p>Pages analyzed: {overview.latestSiteAnalysis?.pages_analyzed ?? 0}</p>
+            <p>Tracked competitors: {overview.brand.competitor_urls.length}</p>
+            <p>Detected content gaps: {overview.latestSiteAnalysis?.missing_content_gaps.length ?? 0}</p>
+          </div>
+          <div className="mt-6">
+            <TriggerCycleButton />
+          </div>
+          <p className="mt-4 text-xs leading-6 text-mid">
+            When test mode is enabled, the runner trims the cycle before model dispatch so total
+            executions never exceed ten.
+          </p>
+        </Card>
+      </div>
+
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+        {overview.categoryBreakdown.map((item) => (
+          <Card key={item.category} className="p-6">
+            <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
+              {item.label}
+            </div>
+            <div className="mt-4 font-display text-3xl text-dark">{item.hitRate.toFixed(1)}%</div>
+            <p className="mt-2 text-sm text-mid">Hit rate across {item.promptCount} prompt executions.</p>
+            <div className="mt-4 text-xs uppercase tracking-[1.4px] text-mid">
+              Delta vs. last cycle: {formatDelta(item.delta)}
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+        <Card className="p-6 md:p-8">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
+                Top competitor mentions
+              </div>
+              <h3 className="mt-2 font-display text-2xl text-dark">Where competitors are outranking you</h3>
+            </div>
+          </div>
+          <div className="mt-6 overflow-x-auto">
+            <table className="min-w-full text-left text-sm text-mid">
+              <thead>
+                <tr className="border-b border-sage/12 text-xs uppercase tracking-[1.4px] text-sage">
+                  <th className="pb-3 pr-4">Competitor</th>
+                  <th className="pb-3 pr-4">Mentions</th>
+                  <th className="pb-3 pr-4">Vs. client</th>
+                  <th className="pb-3">Gap prompts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {tierConfig.competitorBenchmarking ? (
+                  overview.competitorRows.length > 0 ? (
+                    overview.competitorRows.map((row) => (
+                      <tr key={row.competitorName} className="border-b border-sage/8">
+                        <td className="py-4 pr-4 font-medium text-dark">{row.competitorName}</td>
+                        <td className="py-4 pr-4">{row.mentionCount}</td>
+                        <td className="py-4 pr-4">
+                          {row.vsClientMentionCount >= 0 ? "+" : ""}
+                          {row.vsClientMentionCount}
+                        </td>
+                        <td className="py-4">
+                          {overview.latestCompletedCycle ? (
+                            <a
+                              href={`/dashboard/reports/${overview.latestCompletedCycle.id}#gap-analysis`}
+                              className="text-sage underline-offset-4 hover:underline"
+                            >
+                              {row.gapPromptCount} gap prompts
+                            </a>
+                          ) : (
+                            `${row.gapPromptCount} gap prompts`
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={4} className="py-6 text-mid">
+                        Competitor benchmarking will populate after completed cycles collect prompt-level gap data.
+                      </td>
+                    </tr>
+                  )
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="py-6 text-mid">
+                      Competitor benchmarking is available on Growth and Pro plans.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        <Card className="p-6 md:p-8">
+          <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
+            Content opportunities
+          </div>
+          <h3 className="mt-2 font-display text-2xl text-dark">Highest-leverage editorial next steps</h3>
+          <div className="mt-6 space-y-4">
+            {overview.contentOpportunities.map((opportunity) => (
+              <div key={opportunity} className="rounded-card border border-sage/12 bg-sage/5 p-4 text-sm leading-7 text-mid">
+                {opportunity}
+              </div>
+            ))}
           </div>
         </Card>
       </div>
 
       <Card className="p-6 md:p-8">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
-            Cycle runner
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
+              Latest generated content
+            </div>
+            <h3 className="mt-2 font-display text-2xl text-dark">Cycle-linked drafts ready for review</h3>
           </div>
-          <Badge variant={testModeEnabled ? "gold" : "dark"}>
-            {testModeEnabled ? "Test mode cap active" : "Full tier limits active"}
-          </Badge>
+          <a href="/dashboard/reports" className="btn-outline px-5 py-2.5">
+            View reports
+          </a>
         </div>
-        <h3 className="mt-2 font-display text-2xl text-dark">Run the first end-to-end visibility cycle.</h3>
-        <p className="mt-4 max-w-2xl text-sm leading-7 text-mid">
-          This manual trigger runs the prompt library against the models allowed for your tier,
-          scores brand mentions, and stores the resulting cycle plus prompt records in Supabase.
-        </p>
-        <div className="mt-6">
-          <TriggerCycleButton />
+        <div className="mt-6 grid gap-4 md:grid-cols-3">
+          {overview.latestGeneratedContent.length > 0 ? (
+            overview.latestGeneratedContent.slice(0, 3).map((item) => (
+              <div key={item.id} className="rounded-card border border-sage/12 bg-white p-5">
+                <div className="text-xs font-medium uppercase tracking-[1.4px] text-sage">
+                  {item.content_type.replaceAll("_", " ")}
+                </div>
+                <div className="mt-3 font-medium text-dark">{item.title ?? "Untitled draft"}</div>
+                <p className="mt-3 text-sm leading-6 text-mid">
+                  {item.body.slice(0, 180)}
+                  {item.body.length > 180 ? "..." : ""}
+                </p>
+              </div>
+            ))
+          ) : (
+            <div className="rounded-card border border-sage/12 bg-white p-5 text-sm leading-6 text-mid md:col-span-3">
+              {tierConfig.productInteractionContent
+                ? "Generated product interaction drafts, FAQ snippets, and llms.txt recommendations appear here after a completed cycle finishes post-processing."
+                : "FAQ snippets and llms.txt recommendations appear here after a completed cycle finishes post-processing. Product interaction drafts unlock on Growth and Pro."}
+            </div>
+          )}
         </div>
-        <p className="mt-4 text-xs leading-6 text-mid">
-          When test mode is enabled, the runner trims the cycle before any model call so the total
-          prompt executions never exceed ten across all enabled models.
-        </p>
       </Card>
-
-      <div className="grid gap-6 md:grid-cols-3">
-        <Card className="p-6">
-          <div className="text-sm font-medium text-dark">Brand profile</div>
-          <p className="mt-3 text-sm leading-6 text-mid">
-            {context.brand.industry_tags.length} selected subcategories and{" "}
-            {context.brand.competitor_urls.length} tracked competitors are available for future
-            benchmarking.
-          </p>
-        </Card>
-        <Card className="p-6">
-          <div className="text-sm font-medium text-dark">Crawler output</div>
-          <p className="mt-3 text-sm leading-6 text-mid">
-            {context.latestSiteAnalysis?.missing_content_gaps.length ?? 0} content gaps were
-            identified from the onboarding scan.
-          </p>
-        </Card>
-        <Card className="p-6">
-          <div className="text-sm font-medium text-dark">Next build step</div>
-          <p className="mt-3 text-sm leading-6 text-mid">
-            Wire the LLM query engine and prompt library into this shell to populate live
-            dashboard metrics.
-          </p>
-        </Card>
-      </div>
     </div>
   );
 }

@@ -1,10 +1,12 @@
 import "server-only";
+import { generateCycleContent } from "@/lib/analysis/content-generator";
 import { generatePromptLibrary } from "@/lib/analysis/prompt-engine";
 import { runPromptAcrossModels } from "@/lib/llm/aggregator";
+import { generateAndStoreCycleReport } from "@/lib/reports/report-service";
 import { getSuppgoTestModePromptExecutionCap, isSuppgoTestModeEnabled } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 import { getTierAnalysisConfig } from "@/lib/suppgo";
-import type { BrandRecord, CycleRecord, CycleRunSummary, SiteAnalysisRecord } from "@/types";
+import type { BrandRecord, CycleRecord, CycleRunSummary, PromptRecord, SiteAnalysisRecord } from "@/types";
 
 function roundToTwoDecimals(value: number) {
   return Math.round(value * 100) / 100;
@@ -183,6 +185,51 @@ export async function runAnalysisCycle({
 
     if (cycleUpdateError) {
       throw new Error("Unable to finalize the cycle.");
+    }
+
+    const promptRecordsForPostProcessing: PromptRecord[] = results.map((result, index) => ({
+      id: `${cycle.id}-${index}`,
+      cycle_id: cycle.id,
+      brand_id: brand.id,
+      prompt_text: result.promptText,
+      prompt_category: result.promptCategory,
+      model: result.model,
+      raw_response: result.rawResponse,
+      citation_urls: result.citationUrls,
+      brand_mentioned: result.brandMentioned,
+      mention_rank: result.mentionRank,
+      mention_context: result.mentionContext,
+      competitors_mentioned: result.competitorsMentioned,
+      sentiment: result.sentiment,
+      created_at: new Date().toISOString(),
+    }));
+
+    try {
+      await generateCycleContent({
+        brand,
+        cycle: {
+          ...cycle,
+          status: "complete",
+          total_prompts: results.length,
+          mention_count: mentionCount,
+          visibility_score: visibilityScore,
+          completed_at: new Date().toISOString(),
+        },
+        prompts: promptRecordsForPostProcessing,
+        siteAnalysis,
+      });
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      await generateAndStoreCycleReport({
+        cycleId: cycle.id,
+        recipientEmail: user?.email ?? null,
+        sendEmail: true,
+      });
+    } catch {
+      // Keep the analysis cycle marked complete even if post-cycle deliverables need a manual retry.
     }
 
     return {

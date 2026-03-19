@@ -7,6 +7,7 @@ export type PromptCategory =
   | "ingredient_education"
   | "product_interaction";
 export type PromptModel = "gpt-4o" | "claude-sonnet" | "perplexity-sonar-pro";
+export type GeneratedContentType = "faq_snippet" | "product_interaction" | "llms_txt";
 export type PromptSentiment =
   | "positive"
   | "neutral"
@@ -74,6 +75,28 @@ export interface PromptRecord {
   mention_context: string | null;
   competitors_mentioned: string[];
   sentiment: PromptSentiment | null;
+  created_at: string;
+}
+
+export interface GeneratedContentRecord {
+  id: string;
+  brand_id: string;
+  cycle_id: string | null;
+  content_type: GeneratedContentType;
+  title: string | null;
+  body: string;
+  target_prompts: string[];
+  medical_sources: string[];
+  created_at: string;
+}
+
+export interface ReportRecord {
+  id: string;
+  brand_id: string;
+  cycle_id: string;
+  storage_path: string;
+  is_ready: boolean;
+  emailed_at: string | null;
   created_at: string;
 }
 

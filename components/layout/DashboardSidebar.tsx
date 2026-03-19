@@ -44,8 +44,8 @@ export function DashboardSidebar() {
       </div>
 
       <div className="rounded-card border border-white/10 bg-white/5 p-4 text-sm leading-6 text-white/70">
-        The shell is live. Visibility analytics, reports, and influencer workflows plug into
-        these routes in the next build steps.
+        Visibility analytics and reports are live here. Influencer workflows arrive in the next
+        build step.
       </div>
     </aside>
   );

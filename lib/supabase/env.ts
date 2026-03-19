@@ -36,6 +36,10 @@ export function getPerplexityApiKey() {
   return getEnv("PERPLEXITY_API_KEY");
 }
 
+export function getResendApiKey() {
+  return getEnv("RESEND_API_KEY");
+}
+
 export function isSuppgoTestModeEnabled() {
   const explicitValue = process.env.SUPPGO_TEST_MODE;
 

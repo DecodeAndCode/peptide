@@ -1,10 +1,13 @@
 import { cn } from "@/lib/utils";
 
-interface CardProps {
+interface CardProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
-  className?: string;
 }
 
-export function Card({ children, className }: CardProps) {
-  return <div className={cn("marketing-card", className)}>{children}</div>;
+export function Card({ children, className, ...props }: CardProps) {
+  return (
+    <div className={cn("marketing-card", className)} {...props}>
+      {children}
+    </div>
+  );
 }

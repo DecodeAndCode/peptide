@@ -32,7 +32,7 @@ export function DashboardTopbar({ brand, latestCycle }: DashboardTopbarProps) {
     <div className="flex flex-col gap-4 border-b border-sage/12 bg-cream/90 px-6 py-5 backdrop-blur lg:flex-row lg:items-center lg:justify-between">
       <div>
         <div className="text-xs font-medium uppercase tracking-[1.8px] text-sage">
-          Dashboard shell
+          Visibility dashboard
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <h1 className="font-display text-3xl text-dark">{brand.brand_name}</h1>

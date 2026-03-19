@@ -1,7 +1,7 @@
 import "server-only";
 import { WELL_KNOWN_CONSUMER_HEALTH_BRANDS } from "@/lib/analysis/consumer-health-brands";
+import { getWeightedVisibilityScore } from "@/lib/analysis/visibility";
 import { classifySentimentWithHaiku, extractBrandMentionsWithHaiku } from "@/lib/llm/anthropic";
-import { PROMPT_CATEGORY_WEIGHTS } from "@/lib/suppgo";
 import type {
   BrandRecord,
   PromptAnalysisResult,
@@ -201,22 +201,6 @@ async function extractCompetitorMentions(
   }
 }
 
-function getBaseVisibilityScore(rank: number | null) {
-  if (rank === null) {
-    return 0;
-  }
-
-  if (rank === 1) {
-    return 1;
-  }
-
-  if (rank === 2) {
-    return 0.7;
-  }
-
-  return 0.5;
-}
-
 function classifySentimentHeuristically(responseText: string, brandMentioned: boolean) {
   if (REFUSAL_PATTERNS.some((pattern) => pattern.test(responseText))) {
     return "model_refused" as const;
@@ -291,6 +275,6 @@ export async function scoreBrandMention({
     mentionContext,
     competitorsMentioned,
     sentiment,
-    visibilityScore: getBaseVisibilityScore(mentionRank) * PROMPT_CATEGORY_WEIGHTS[promptCategory],
+    visibilityScore: getWeightedVisibilityScore(promptCategory, mentionRank),
   };
 }
