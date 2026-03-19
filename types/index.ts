@@ -1,6 +1,8 @@
 export type SubscriptionTier = "starter" | "growth" | "pro";
 export type SubscriptionStatus = "trial" | "active" | "cancelled";
 export type CycleStatus = "pending" | "running" | "complete" | "failed";
+export type InfluencerPlatform = "instagram" | "tiktok";
+export type InfluencerFollowerRange = "micro_10k_50k" | "mid_50k_200k" | "macro_200k+";
 export type PromptCategory =
   | "explicit_recommendation"
   | "problem_solution"
@@ -87,6 +89,21 @@ export interface GeneratedContentRecord {
   body: string;
   target_prompts: string[];
   medical_sources: string[];
+  created_at: string;
+}
+
+export interface InfluencerMatchRecord {
+  id: string;
+  brand_id: string;
+  cycle_id: string | null;
+  platform: InfluencerPlatform;
+  handle: string;
+  display_name: string | null;
+  follower_range: InfluencerFollowerRange | null;
+  niche_tags: string[];
+  match_reason: string | null;
+  outreach_message: string | null;
+  shown_in_cycle: number[];
   created_at: string;
 }
 

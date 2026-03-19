@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
-import { runAnalysisCycle } from "@/lib/analysis/cycle-runner";
+import { generateCycleInfluencerMatches } from "@/lib/influencers/matcher";
 import { enforceRateLimit, enforceSameOrigin } from "@/lib/security";
 import { createClient } from "@/lib/supabase/server";
-import type { BrandRecord, CycleRecord, SiteAnalysisRecord } from "@/types";
+import { getTierAnalysisConfig } from "@/lib/suppgo";
+import type { BrandRecord, CycleRecord, PromptRecord, SiteAnalysisRecord } from "@/types";
 
 export const runtime = "nodejs";
 
@@ -41,18 +42,24 @@ export async function POST(request: Request) {
     .maybeSingle<BrandRecord>();
 
   if (!brand) {
-    return NextResponse.json({ error: "Complete onboarding before running a cycle." }, { status: 400 });
+    return NextResponse.json({ error: "Complete onboarding before refreshing matches." }, { status: 400 });
   }
 
-  const [{ data: runningCycle }, { data: latestSiteAnalysis }] = await Promise.all([
+  const tierConfig = getTierAnalysisConfig(brand.subscription_tier);
+
+  if (!tierConfig.influencerMatching) {
+    return NextResponse.json({ error: "Influencer matching is available on Pro only." }, { status: 403 });
+  }
+
+  const [{ data: cycle }, { data: siteAnalysis }] = await Promise.all([
     supabase
       .from("cycles")
-      .select("id")
+      .select("*")
       .eq("brand_id", brand.id)
-      .eq("status", "running")
-      .order("created_at", { ascending: false })
+      .eq("status", "complete")
+      .order("completed_at", { ascending: false })
       .limit(1)
-      .maybeSingle<Pick<CycleRecord, "id">>(),
+      .maybeSingle<CycleRecord>(),
     supabase
       .from("site_analyses")
       .select("*")
@@ -62,30 +69,36 @@ export async function POST(request: Request) {
       .maybeSingle<SiteAnalysisRecord>(),
   ]);
 
-  if (runningCycle) {
+  if (!cycle) {
     return NextResponse.json(
-      { error: "A cycle is already running. Wait for it to finish before starting another." },
-      { status: 409 },
-    );
-  }
-
-  if (!latestSiteAnalysis) {
-    return NextResponse.json(
-      { error: "Run site analysis during onboarding before triggering a cycle." },
+      { error: "Complete a cycle before refreshing influencer matches." },
       { status: 400 },
     );
   }
 
+  const { data: prompts } = await supabase
+    .from("prompts")
+    .select("*")
+    .eq("cycle_id", cycle.id)
+    .order("created_at", { ascending: true })
+    .returns<PromptRecord[]>();
+
   try {
-    const summary = await runAnalysisCycle({
+    const matches = await generateCycleInfluencerMatches({
       brand,
-      siteAnalysis: latestSiteAnalysis,
+      cycle,
+      prompts: prompts ?? [],
+      siteAnalysis: siteAnalysis ?? null,
     });
 
-    return NextResponse.json({ cycle: summary });
+    return NextResponse.json({
+      matches: {
+        count: matches.length,
+      },
+    });
   } catch {
     return NextResponse.json(
-      { error: "We couldn't complete the analysis cycle right now. Please retry shortly." },
+      { error: "We couldn't refresh influencer matches right now. Please retry shortly." },
       { status: 500 },
     );
   }

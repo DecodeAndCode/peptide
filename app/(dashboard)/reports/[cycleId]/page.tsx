@@ -6,6 +6,7 @@ import { ReportActionButtons } from "@/components/dashboard/ReportActionButtons"
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { getCycleReportData } from "@/lib/dashboard";
+import { formatRoundedValue, formatSignedRoundedValue } from "@/lib/formatting";
 import { getTierAnalysisConfig } from "@/lib/suppgo";
 
 function formatDelta(value: number | null) {
@@ -13,7 +14,7 @@ function formatDelta(value: number | null) {
     return "Baseline";
   }
 
-  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}`;
+  return formatSignedRoundedValue(value);
 }
 
 export default async function CycleReportPage({
@@ -66,7 +67,7 @@ export default async function CycleReportPage({
             <div className="rounded-card border border-sage/12 bg-white p-4">
               <div className="text-xs uppercase tracking-[1.4px] text-sage">Visibility score</div>
               <div className="mt-2 font-display text-3xl text-dark">
-                {report.executiveSummary.visibilityScore.toFixed(1)}
+                {formatRoundedValue(report.executiveSummary.visibilityScore)}
               </div>
             </div>
             <div className="rounded-card border border-sage/12 bg-white p-4">
@@ -78,7 +79,7 @@ export default async function CycleReportPage({
             <div className="rounded-card border border-sage/12 bg-white p-4">
               <div className="text-xs uppercase tracking-[1.4px] text-sage">Mention rate</div>
               <div className="mt-2 font-display text-3xl text-dark">
-                {report.executiveSummary.mentionRate.toFixed(1)}%
+                {formatRoundedValue(report.executiveSummary.mentionRate, "%")}
               </div>
             </div>
           </div>

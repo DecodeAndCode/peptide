@@ -10,6 +10,7 @@ import {
   renderToBuffer,
 } from "@react-pdf/renderer";
 import type { CycleReportData } from "@/lib/dashboard";
+import { formatRoundedValue, formatSignedRoundedValue } from "@/lib/formatting";
 import { PROMPT_CATEGORY_LABELS } from "@/lib/suppgo";
 
 const styles = StyleSheet.create({
@@ -138,19 +139,19 @@ function PdfReport({ data }: { data: CycleReportData }) {
           <View style={styles.metricRow}>
             <View style={styles.metricCard}>
               <Text style={styles.metricLabel}>Visibility score</Text>
-              <Text style={styles.metricValue}>{data.executiveSummary.visibilityScore.toFixed(1)}</Text>
+              <Text style={styles.metricValue}>{formatRoundedValue(data.executiveSummary.visibilityScore)}</Text>
             </View>
             <View style={styles.metricCard}>
               <Text style={styles.metricLabel}>Delta</Text>
               <Text style={styles.metricValue}>
                 {data.executiveSummary.visibilityDelta === null
                   ? "Baseline"
-                  : `${data.executiveSummary.visibilityDelta >= 0 ? "+" : ""}${data.executiveSummary.visibilityDelta.toFixed(1)}`}
+                  : formatSignedRoundedValue(data.executiveSummary.visibilityDelta)}
               </Text>
             </View>
             <View style={styles.metricCard}>
               <Text style={styles.metricLabel}>Mention rate</Text>
-              <Text style={styles.metricValue}>{data.executiveSummary.mentionRate.toFixed(1)}%</Text>
+              <Text style={styles.metricValue}>{formatRoundedValue(data.executiveSummary.mentionRate, "%")}</Text>
             </View>
           </View>
           <Text style={styles.bullet}>Top win: {data.executiveSummary.topWin}</Text>
@@ -181,8 +182,9 @@ function PdfReport({ data }: { data: CycleReportData }) {
           <Text style={styles.sectionTitle}>3. Prompt Category Performance</Text>
           {data.categoryPerformance.map((row) => (
             <Text key={row.category} style={styles.bullet}>
-              {row.label}: GPT-4o {row["gpt-4o"].toFixed(1)}% | Claude {row["claude-sonnet"].toFixed(1)}% |
-              Perplexity {row["perplexity-sonar-pro"].toFixed(1)}%
+              {row.label}: GPT-4o {formatRoundedValue(row["gpt-4o"], "%")} | Claude{" "}
+              {formatRoundedValue(row["claude-sonnet"], "%")} | Perplexity{" "}
+              {formatRoundedValue(row["perplexity-sonar-pro"], "%")}
             </Text>
           ))}
         </View>

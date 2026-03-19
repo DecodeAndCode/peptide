@@ -1,11 +1,13 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import { getWeightedVisibilityScore, toVisibilityIndex } from "@/lib/analysis/visibility";
+import { formatRoundedValue, quotePromptFragment } from "@/lib/formatting";
 import { PROMPT_CATEGORY_LABELS } from "@/lib/suppgo";
 import type {
   BrandRecord,
   CycleRecord,
   GeneratedContentRecord,
+  InfluencerMatchRecord,
   PromptCategory,
   PromptModel,
   PromptRecord,
@@ -122,45 +124,30 @@ export interface CycleReportData {
 }
 
 const PLACEHOLDER_TREND: VisibilityTrendPoint[] = [
-  {
-    cycleId: "demo-1",
-    cycleLabel: "Jan",
-    cycleDate: "Jan",
-    average: 36,
-    "gpt-4o": 38,
-    "claude-sonnet": 34,
-    "perplexity-sonar-pro": 0,
-  },
-  {
-    cycleId: "demo-2",
-    cycleLabel: "Feb",
-    cycleDate: "Feb",
-    average: 42,
-    "gpt-4o": 44,
-    "claude-sonnet": 40,
-    "perplexity-sonar-pro": 0,
-  },
-  {
-    cycleId: "demo-3",
-    cycleLabel: "Mar",
-    cycleDate: "Mar",
-    average: 49,
-    "gpt-4o": 50,
-    "claude-sonnet": 48,
-    "perplexity-sonar-pro": 0,
-  },
 ];
 
 function roundPercent(value: number) {
   return Math.round(value * 10) / 10;
 }
 
-function getCycleDateLabel(cycle: CycleRecord) {
+function formatCycleTimeLabel(date: Date) {
+  return date
+    .toLocaleTimeString(undefined, {
+      hour: "numeric",
+    })
+    .replace(/\s/g, "")
+    .toLowerCase();
+}
+
+function getCycleDateLabel(cycle: CycleRecord, includeTime = false) {
   const value = cycle.completed_at ?? cycle.created_at;
-  return new Date(value).toLocaleDateString(undefined, {
+  const date = new Date(value);
+  const dateLabel = date.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
   });
+
+  return includeTime ? `${dateLabel} ${formatCycleTimeLabel(date)}` : dateLabel;
 }
 
 function getCycleMonthLabel(cycle: CycleRecord) {
@@ -270,19 +257,21 @@ function getCompetitorRows(prompts: PromptRecord[]) {
 }
 
 function buildOpportunityText(topic: string, category: PromptCategory) {
+  const quotedTopic = quotePromptFragment(topic);
+
   if (category === "product_interaction") {
-    return `You are frequently missing product interaction coverage around ${topic}. Adding a trust-first FAQ and supporting article on this stack could improve answer inclusion.`;
+    return `You are frequently missing product interaction coverage around ${quotedTopic}. Adding a trust-first FAQ and supporting article on this stack could improve answer inclusion.`;
   }
 
   if (category === "problem_solution") {
-    return `Problem-solution queries around ${topic} are underperforming. Strengthening educational guidance tied to your relevant products would close the gap.`;
+    return `Problem-solution queries around ${quotedTopic} are underperforming. Strengthening educational guidance tied to your relevant products would close the gap.`;
   }
 
   if (category === "explicit_recommendation") {
-    return `Recommendation-style prompts tied to ${topic} are favoring competitors. Clear comparison copy and stronger authority signals would help SuppGo surface your brand more often.`;
+    return `Recommendation-style prompts tied to ${quotedTopic} are favoring competitors. Clear comparison copy and stronger authority signals would help SuppGo surface your brand more often.`;
   }
 
-  return `Ingredient education prompts mentioning ${topic} are being won elsewhere. A concise explainer with citations and brand context should improve visibility.`;
+  return `Ingredient education prompts mentioning ${quotedTopic} are being won elsewhere. A concise explainer with citations and brand context should improve visibility.`;
 }
 
 function getContentOpportunities(
@@ -335,11 +324,17 @@ function getContentOpportunities(
 
 function getTrendData(cycles: CycleRecord[], prompts: PromptRecord[]) {
   const promptMap = new Map<string, PromptRecord[]>();
+  const dateKeyCounts = new Map<string, number>();
 
   prompts.forEach((prompt) => {
     const existing = promptMap.get(prompt.cycle_id) ?? [];
     existing.push(prompt);
     promptMap.set(prompt.cycle_id, existing);
+  });
+
+  cycles.forEach((cycle) => {
+    const dateKey = getCycleDateLabel(cycle);
+    dateKeyCounts.set(dateKey, (dateKeyCounts.get(dateKey) ?? 0) + 1);
   });
 
   return cycles.map((cycle) => {
@@ -355,13 +350,44 @@ function getTrendData(cycles: CycleRecord[], prompts: PromptRecord[]) {
     return {
       cycleId: cycle.id,
       cycleLabel: getCycleMonthLabel(cycle),
-      cycleDate: getCycleDateLabel(cycle),
+      cycleDate: getCycleDateLabel(cycle, (dateKeyCounts.get(getCycleDateLabel(cycle)) ?? 0) > 1),
       average: cycle.visibility_score ?? getVisibilityIndex(cyclePrompts),
       "gpt-4o": series["gpt-4o"],
       "claude-sonnet": series["claude-sonnet"],
       "perplexity-sonar-pro": series["perplexity-sonar-pro"],
     };
   });
+}
+
+function getInfluencerPreview(matches: InfluencerMatchRecord[]) {
+  if (matches.length === 0) {
+    return [
+      {
+        title: "Influencer matching unlock",
+        description:
+          "Pro plans can layer public-web influencer discovery on top of this gap analysis once fresh matches are generated for the cycle.",
+        href: "/influencers",
+      },
+      {
+        title: "Biohacking and wellness angles",
+        description:
+          "Cycle gaps help shape the creator niches that should be targeted first when influencer matching is active.",
+        href: "/influencers",
+      },
+      {
+        title: "Outreach copy will follow report themes",
+        description:
+          "SuppGo will eventually use the same winning and missing prompt patterns to tailor creator outreach messaging.",
+        href: "/influencers",
+      },
+    ];
+  }
+
+  return matches.slice(0, 3).map((match) => ({
+    title: `${match.platform === "instagram" ? "Instagram" : "TikTok"} @${match.handle}`,
+    description: match.match_reason ?? "Brand-fit rationale will appear here after scoring completes.",
+    href: "/influencers",
+  }));
 }
 
 function getLikelyReason(prompt: PromptResultRowData) {
@@ -473,8 +499,8 @@ function getExecutiveSummary(
     topMiss,
     summaryText:
       visibilityDelta === null
-        ? `Cycle #${cycle.cycle_number} established your baseline visibility across ${prompts.length} prompt executions, with a ${mentionRate}% mention rate.`
-        : `Cycle #${cycle.cycle_number} closed at ${visibilityScore.toFixed(1)} visibility, ${visibilityDelta >= 0 ? "up" : "down"} ${Math.abs(visibilityDelta).toFixed(1)} points from the previous cycle, with a ${mentionRate}% mention rate.`,
+        ? `Cycle #${cycle.cycle_number} established your baseline visibility across ${prompts.length} prompt executions, with a ${formatRoundedValue(mentionRate, "%")} mention rate.`
+        : `Cycle #${cycle.cycle_number} closed at ${formatRoundedValue(visibilityScore)} visibility, ${visibilityDelta >= 0 ? "up" : "down"} ${formatRoundedValue(Math.abs(visibilityDelta))} points from the previous cycle, with a ${formatRoundedValue(mentionRate, "%")} mention rate.`,
   };
 }
 
@@ -602,10 +628,8 @@ export const getDashboardOverview = cache(async (): Promise<DashboardOverviewDat
       mentionRate: getMentionRate(latestPrompts),
     },
     trend:
-      context.completedCycles.length >= 2
-        ? getTrendData(context.completedCycles, context.prompts)
-        : PLACEHOLDER_TREND,
-    hasPlaceholderTrend: context.completedCycles.length < 2,
+      context.completedCycles.length > 0 ? getTrendData(context.completedCycles, context.prompts) : PLACEHOLDER_TREND,
+    hasPlaceholderTrend: context.completedCycles.length < 3,
     categoryBreakdown: getCategoryBreakdown(latestPrompts, previousPrompts),
     competitorRows: getCompetitorRows(latestPrompts),
     contentOpportunities: getContentOpportunities(
@@ -660,7 +684,7 @@ export const getCycleReportData = cache(async (cycleId: string): Promise<CycleRe
   const cycleIndex = context.completedCycles.findIndex((item) => item.id === cycle.id);
   const previousCycle = cycleIndex > 0 ? context.completedCycles[cycleIndex - 1] : null;
   const supabase = createClient();
-  const [{ data: prompts }, { data: generatedContent }] = await Promise.all([
+  const [{ data: prompts }, { data: generatedContent }, { data: influencerMatches }] = await Promise.all([
     supabase
       .from("prompts")
       .select("*")
@@ -674,6 +698,13 @@ export const getCycleReportData = cache(async (cycleId: string): Promise<CycleRe
       .eq("cycle_id", cycle.id)
       .order("created_at", { ascending: true })
       .returns<GeneratedContentRecord[]>(),
+    supabase
+      .from("influencer_matches")
+      .select("*")
+      .eq("brand_id", context.brand.id)
+      .eq("cycle_id", cycle.id)
+      .order("created_at", { ascending: true })
+      .returns<InfluencerMatchRecord[]>(),
   ]);
 
   const promptRecords = prompts ?? [];
@@ -694,25 +725,6 @@ export const getCycleReportData = cache(async (cycleId: string): Promise<CycleRe
     competitorGaps: getCompetitorGaps(promptRecords),
     hits,
     misses,
-    influencerPreview: [
-      {
-        title: "Influencer matching unlock",
-        description:
-          "Pro plans can layer public-web influencer discovery on top of this gap analysis once Step 13 is enabled.",
-        href: "/dashboard/influencers",
-      },
-      {
-        title: "Biohacking and wellness angles",
-        description:
-          "Cycle gaps help shape the creator niches that should be targeted first when influencer matching is active.",
-        href: "/dashboard/influencers",
-      },
-      {
-        title: "Outreach copy will follow report themes",
-        description:
-          "SuppGo will eventually use the same winning and missing prompt patterns to tailor creator outreach messaging.",
-        href: "/dashboard/influencers",
-      },
-    ],
+    influencerPreview: getInfluencerPreview(influencerMatches ?? []),
   };
 });

@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { ReportActionButtons } from "@/components/dashboard/ReportActionButtons";
+import { formatRoundedValue, formatSignedRoundedValue } from "@/lib/formatting";
 import { getReportsList } from "@/lib/dashboard";
 
 function formatDelta(value: number | null) {
@@ -8,7 +9,7 @@ function formatDelta(value: number | null) {
     return "Baseline";
   }
 
-  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}`;
+  return formatSignedRoundedValue(value);
 }
 
 export default async function ReportsPage() {
@@ -52,7 +53,7 @@ export default async function ReportsPage() {
                   <div className="rounded-card border border-sage/12 bg-white p-4">
                     <div className="text-xs uppercase tracking-[1.4px] text-sage">Visibility score</div>
                     <div className="mt-2 font-display text-3xl text-dark">
-                      {(cycle.visibility_score ?? 0).toFixed(1)}
+                      {formatRoundedValue(cycle.visibility_score ?? 0)}
                     </div>
                   </div>
                   <div className="rounded-card border border-sage/12 bg-white p-4">
@@ -67,7 +68,7 @@ export default async function ReportsPage() {
               </div>
 
               <div className="space-y-3">
-                <a href={`/dashboard/reports/${cycle.id}`} className="btn-outline px-5 py-2.5">
+                <a href={`/reports/${cycle.id}`} className="btn-outline px-5 py-2.5">
                   View report
                 </a>
                 <ReportActionButtons cycleId={cycle.id} />

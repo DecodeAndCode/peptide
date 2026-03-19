@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/Badge";
 import { TriggerCycleButton } from "@/components/dashboard/TriggerCycleButton";
 import { VisibilityGraph } from "@/components/dashboard/VisibilityGraph";
 import { getDashboardOverview } from "@/lib/dashboard";
+import { formatRoundedValue, formatSignedRoundedValue } from "@/lib/formatting";
 import { getSubscriptionPlan, getTierAnalysisConfig } from "@/lib/suppgo";
 import { isSuppgoTestModeEnabled } from "@/lib/supabase/env";
 
@@ -11,7 +12,7 @@ function formatDelta(value: number | null, suffix = "%") {
     return "Baseline";
   }
 
-  return `${value >= 0 ? "+" : ""}${value.toFixed(1)}${suffix}`;
+  return formatSignedRoundedValue(value, suffix);
 }
 
 export default async function DashboardPage() {
@@ -56,7 +57,7 @@ export default async function DashboardPage() {
             Current visibility score
           </div>
           <div className="mt-4 font-display text-4xl text-dark">
-            {overview.metrics.currentVisibilityScore.toFixed(1)}
+            {formatRoundedValue(overview.metrics.currentVisibilityScore)}
           </div>
           <p className="mt-3 text-sm leading-6 text-mid">0-100 visibility index for the latest completed cycle.</p>
         </Card>
@@ -80,7 +81,9 @@ export default async function DashboardPage() {
           <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
             Mention rate
           </div>
-          <div className="mt-4 font-display text-4xl text-dark">{overview.metrics.mentionRate.toFixed(1)}%</div>
+          <div className="mt-4 font-display text-4xl text-dark">
+            {formatRoundedValue(overview.metrics.mentionRate, "%")}
+          </div>
           <p className="mt-3 text-sm leading-6 text-mid">Share of prompt executions where the brand appeared in the answer.</p>
         </Card>
       </div>
@@ -137,7 +140,9 @@ export default async function DashboardPage() {
             <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
               {item.label}
             </div>
-            <div className="mt-4 font-display text-3xl text-dark">{item.hitRate.toFixed(1)}%</div>
+            <div className="mt-4 font-display text-3xl text-dark">
+              {formatRoundedValue(item.hitRate, "%")}
+            </div>
             <p className="mt-2 text-sm text-mid">Hit rate across {item.promptCount} prompt executions.</p>
             <div className="mt-4 text-xs uppercase tracking-[1.4px] text-mid">
               Delta vs. last cycle: {formatDelta(item.delta)}
@@ -180,7 +185,7 @@ export default async function DashboardPage() {
                         <td className="py-4">
                           {overview.latestCompletedCycle ? (
                             <a
-                              href={`/dashboard/reports/${overview.latestCompletedCycle.id}#gap-analysis`}
+                              href={`/reports/${overview.latestCompletedCycle.id}#gap-analysis`}
                               className="text-sage underline-offset-4 hover:underline"
                             >
                               {row.gapPromptCount} gap prompts
@@ -233,7 +238,7 @@ export default async function DashboardPage() {
             </div>
             <h3 className="mt-2 font-display text-2xl text-dark">Cycle-linked drafts ready for review</h3>
           </div>
-          <a href="/dashboard/reports" className="btn-outline px-5 py-2.5">
+          <a href="/reports" className="btn-outline px-5 py-2.5">
             View reports
           </a>
         </div>

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { analyzeSite } from "@/lib/analysis/site-crawler";
+import { enforceSameOrigin } from "@/lib/security";
 import { createClient } from "@/lib/supabase/server";
 
 const analyzeSiteSchema = z.object({
@@ -10,6 +11,12 @@ const analyzeSiteSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const sameOriginError = enforceSameOrigin(request);
+
+  if (sameOriginError) {
+    return sameOriginError;
+  }
+
   const supabase = createClient();
   const {
     data: { user },

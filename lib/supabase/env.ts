@@ -40,6 +40,18 @@ export function getResendApiKey() {
   return getEnv("RESEND_API_KEY");
 }
 
+export function getUpstashRedisRestUrl() {
+  return getEnv("UPSTASH_REDIS_REST_URL");
+}
+
+export function getUpstashRedisRestToken() {
+  return getEnv("UPSTASH_REDIS_REST_TOKEN");
+}
+
+export function isUpstashConfigured() {
+  return Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+}
+
 export function isSuppgoTestModeEnabled() {
   const explicitValue = process.env.SUPPGO_TEST_MODE;
 

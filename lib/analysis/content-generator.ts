@@ -1,4 +1,5 @@
 import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { queryOpenAi } from "@/lib/llm/openai";
 import { queryPerplexity } from "@/lib/llm/perplexity";
@@ -45,6 +46,18 @@ interface PromptOpportunity {
   category: PromptCategory;
   missCount: number;
   competitorCount: number;
+}
+
+function logContentGenerationError(
+  stage: string,
+  error: unknown,
+  meta: Record<string, string | number | boolean | null | undefined> = {},
+) {
+  console.error("[content-generator]", {
+    stage,
+    message: error instanceof Error ? error.message : "Unknown error",
+    ...meta,
+  });
 }
 
 function stripMarkdownCodeFence(value: string) {
@@ -164,46 +177,79 @@ function buildFallbackProductInteractionBody(
   ].join(" ");
 }
 
+function buildFallbackFaqBody(
+  brand: BrandRecord,
+  promptText: string,
+) {
+  return [
+    `Direct answer: ${promptText.replace(/\?$/, "")} should be answered in clear, practical language that makes the interaction or topic easy to understand.`,
+    `For ${brand.brand_name}, keep the response concise, grounded, and tied to the relevant product or ingredient only where it genuinely helps the reader.`,
+    "This content is for informational purposes only and does not constitute medical advice.",
+  ].join(" ");
+}
+
+function buildFallbackFaqPrompt(prompts: PromptRecord[], siteAnalysis: SiteAnalysisRecord | null) {
+  return (
+    prompts.find((prompt) => prompt.prompt_category === "product_interaction")?.prompt_text ??
+    prompts[0]?.prompt_text ??
+    siteAnalysis?.content_signals?.faqTopics?.[0] ??
+    "What should I know about using these products together?"
+  );
+}
+
 async function generateProductInteractionArticle(
   brand: BrandRecord,
   promptText: string,
   siteAnalysis: SiteAnalysisRecord | null,
 ) {
-  const siteContext = buildSiteContext(siteAnalysis);
-  const research = await researchInteractionPrompt(promptText, brand, siteAnalysis);
-  const response = await queryOpenAi(
-    [
-      "You are a medical content writer for a consumer health brand.",
-      `Brand: ${brand.brand_name}`,
-      `Industry categories: ${brand.industry_tags.map(getIndustryLabel).join(", ") || "Unknown"}`,
-      `Hero products/ingredients: ${[...siteContext.products, ...siteContext.ingredients].slice(0, 10).join(", ") || "Unknown"}`,
-      `Query this content should answer: ${promptText}`,
-      `Research findings: ${research.summary}`,
-      `Approved citations: ${research.sources.join(", ") || "None available"}`,
-      "Write a 200-300 word FAQ answer that directly answers the query, stays trustworthy, references the brand naturally where relevant, includes at least two provided citations inline when available, and ends with the disclaimer sentence exactly as written in the prompt spec.",
-      'Return JSON only in the form {"title":"","body":"","cited_sources":[],"target_query":""}.',
-    ].join("\n"),
-  );
+  try {
+    const siteContext = buildSiteContext(siteAnalysis);
+    const research = await researchInteractionPrompt(promptText, brand, siteAnalysis);
+    const response = await queryOpenAi(
+      [
+        "You are a medical content writer for a consumer health brand.",
+        `Brand: ${brand.brand_name}`,
+        `Industry categories: ${brand.industry_tags.map(getIndustryLabel).join(", ") || "Unknown"}`,
+        `Hero products/ingredients: ${[...siteContext.products, ...siteContext.ingredients].slice(0, 10).join(", ") || "Unknown"}`,
+        `Query this content should answer: ${promptText}`,
+        `Research findings: ${research.summary}`,
+        `Approved citations: ${research.sources.join(", ") || "None available"}`,
+        "Write a 200-300 word FAQ answer that directly answers the query, stays trustworthy, references the brand naturally where relevant, includes at least two provided citations inline when available, and ends with the disclaimer sentence exactly as written in the prompt spec.",
+        'Return JSON only in the form {"title":"","body":"","cited_sources":[],"target_query":""}.',
+      ].join("\n"),
+    );
 
-  const parsed = safeParseStructuredContent(response.text);
+    const parsed = safeParseStructuredContent(response.text);
 
-  if (parsed.success) {
+    if (parsed.success) {
+      return {
+        content_type: "product_interaction" as const,
+        title: parsed.data.title,
+        body: parsed.data.body,
+        target_prompts: [parsed.data.target_query],
+        medical_sources: filterAuthoritySources(
+          parsed.data.cited_sources.length > 0 ? parsed.data.cited_sources : research.sources,
+        ),
+      };
+    }
+
     return {
       content_type: "product_interaction" as const,
-      title: parsed.data.title,
-      body: parsed.data.body,
-      target_prompts: [parsed.data.target_query],
-      medical_sources: filterAuthoritySources(parsed.data.cited_sources.length > 0 ? parsed.data.cited_sources : research.sources),
+      title: promptText,
+      body: buildFallbackProductInteractionBody(brand, promptText, research.sources, siteAnalysis),
+      target_prompts: [promptText],
+      medical_sources: research.sources,
+    };
+  } catch (error) {
+    logContentGenerationError("product_interaction", error, { contentType: "product_interaction" });
+    return {
+      content_type: "product_interaction" as const,
+      title: promptText,
+      body: buildFallbackProductInteractionBody(brand, promptText, [], siteAnalysis),
+      target_prompts: [promptText],
+      medical_sources: [],
     };
   }
-
-  return {
-    content_type: "product_interaction" as const,
-    title: promptText,
-    body: buildFallbackProductInteractionBody(brand, promptText, research.sources, siteAnalysis),
-    target_prompts: [promptText],
-    medical_sources: research.sources,
-  };
 }
 
 async function generateFaqSnippet(
@@ -211,42 +257,49 @@ async function generateFaqSnippet(
   promptText: string,
   siteAnalysis: SiteAnalysisRecord | null,
 ) {
-  const siteContext = buildSiteContext(siteAnalysis);
-  const response = await queryOpenAi(
-    [
-      "Write a concise FAQ snippet for a consumer health brand.",
-      `Brand: ${brand.brand_name}`,
-      `Question: ${promptText}`,
-      `Known products: ${siteContext.products.join(", ") || "Unknown"}`,
-      `Known ingredients: ${siteContext.ingredients.join(", ") || "Unknown"}`,
-      "Keep the answer around 90-140 words, lead with a direct answer, mention the brand naturally if relevant, and end with the disclaimer sentence exactly: This content is for informational purposes only and does not constitute medical advice.",
-      'Return JSON only in the form {"title":"","body":"","cited_sources":[],"target_query":""}.',
-    ].join("\n"),
-  );
+  try {
+    const siteContext = buildSiteContext(siteAnalysis);
+    const response = await queryOpenAi(
+      [
+        "Write a concise FAQ snippet for a consumer health brand.",
+        `Brand: ${brand.brand_name}`,
+        `Question: ${promptText}`,
+        `Known products: ${siteContext.products.join(", ") || "Unknown"}`,
+        `Known ingredients: ${siteContext.ingredients.join(", ") || "Unknown"}`,
+        "Keep the answer around 90-140 words, lead with a direct answer, mention the brand naturally if relevant, and end with the disclaimer sentence exactly: This content is for informational purposes only and does not constitute medical advice.",
+        'Return JSON only in the form {"title":"","body":"","cited_sources":[],"target_query":""}.',
+      ].join("\n"),
+    );
 
-  const parsed = safeParseStructuredContent(response.text);
+    const parsed = safeParseStructuredContent(response.text);
 
-  if (parsed.success) {
+    if (parsed.success) {
+      return {
+        content_type: "faq_snippet" as const,
+        title: parsed.data.title,
+        body: parsed.data.body,
+        target_prompts: [parsed.data.target_query],
+        medical_sources: [],
+      };
+    }
+
     return {
       content_type: "faq_snippet" as const,
-      title: parsed.data.title,
-      body: parsed.data.body,
-      target_prompts: [parsed.data.target_query],
+      title: promptText,
+      body: buildFallbackFaqBody(brand, promptText),
+      target_prompts: [promptText],
+      medical_sources: [],
+    };
+  } catch (error) {
+    logContentGenerationError("faq_snippet", error, { contentType: "faq_snippet" });
+    return {
+      content_type: "faq_snippet" as const,
+      title: promptText,
+      body: buildFallbackFaqBody(brand, promptText),
+      target_prompts: [promptText],
       medical_sources: [],
     };
   }
-
-  return {
-    content_type: "faq_snippet" as const,
-    title: promptText,
-    body: [
-      `Direct answer: ${promptText.replace(/\?$/, "")} should be answered in clear, practical language that makes the interaction or topic easy to understand.`,
-      `For ${brand.brand_name}, keep the response concise, grounded, and tied to the relevant product or ingredient only where it genuinely helps the reader.`,
-      "This content is for informational purposes only and does not constitute medical advice.",
-    ].join(" "),
-    target_prompts: [promptText],
-    medical_sources: [],
-  };
 }
 
 function generateLlmsTxtSnippet(brand: BrandRecord, siteAnalysis: SiteAnalysisRecord | null) {
@@ -276,17 +329,20 @@ export async function generateCycleContent({
   cycle,
   prompts,
   siteAnalysis,
+  supabaseClient,
 }: {
   brand: BrandRecord;
   cycle: CycleRecord;
   prompts: PromptRecord[];
   siteAnalysis: SiteAnalysisRecord | null;
+  supabaseClient?: SupabaseClient;
 }) {
   const tierConfig = getTierAnalysisConfig(brand.subscription_tier);
-  const supabase = createClient();
-  const rowsToInsert: GeneratedContentInsert[] = [];
+  const supabase = supabaseClient ?? createClient();
+  const rowsToInsert: GeneratedContentInsert[] = [generateLlmsTxtSnippet(brand, siteAnalysis)];
 
   const topMissedPrompts = getPromptOpportunities(prompts).slice(0, 3);
+  const faqPrompts = topMissedPrompts.length > 0 ? topMissedPrompts : [{ promptText: buildFallbackFaqPrompt(prompts, siteAnalysis) }];
 
   if (tierConfig.productInteractionContent) {
     const interactionPrompts = getPromptOpportunities(prompts, "product_interaction").slice(0, 5);
@@ -296,13 +352,20 @@ export async function generateCycleContent({
     }
   }
 
-  for (const opportunity of topMissedPrompts) {
+  for (const opportunity of faqPrompts) {
     rowsToInsert.push(await generateFaqSnippet(brand, opportunity.promptText, siteAnalysis));
   }
 
-  rowsToInsert.push(generateLlmsTxtSnippet(brand, siteAnalysis));
+  const { error: deleteError } = await supabase
+    .from("generated_content")
+    .delete()
+    .eq("brand_id", brand.id)
+    .eq("cycle_id", cycle.id);
 
-  await supabase.from("generated_content").delete().eq("brand_id", brand.id).eq("cycle_id", cycle.id);
+  if (deleteError) {
+    logContentGenerationError("delete_existing", deleteError, { contentType: "generated_content" });
+    throw new Error("Unable to reset generated content rows for this cycle.");
+  }
 
   const { data, error } = await supabase
     .from("generated_content")
@@ -321,6 +384,10 @@ export async function generateCycleContent({
     .returns<GeneratedContentRecord[]>();
 
   if (error) {
+    logContentGenerationError("insert_generated_content", error, {
+      contentType: "generated_content",
+      rowCount: rowsToInsert.length,
+    });
     throw new Error("Unable to store generated content.");
   }
 

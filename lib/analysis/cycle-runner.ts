@@ -1,6 +1,8 @@
 import "server-only";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { generateCycleContent } from "@/lib/analysis/content-generator";
 import { generatePromptLibrary } from "@/lib/analysis/prompt-engine";
+import { generateCycleInfluencerMatches } from "@/lib/influencers/matcher";
 import { runPromptAcrossModels } from "@/lib/llm/aggregator";
 import { generateAndStoreCycleReport } from "@/lib/reports/report-service";
 import { getSuppgoTestModePromptExecutionCap, isSuppgoTestModeEnabled } from "@/lib/supabase/env";
@@ -10,6 +12,18 @@ import type { BrandRecord, CycleRecord, CycleRunSummary, PromptRecord, SiteAnaly
 
 function roundToTwoDecimals(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+function logPostCycleFailure(
+  stage: string,
+  error: unknown,
+  meta: Record<string, string | number | boolean | null | undefined> = {},
+) {
+  console.error("[cycle-runner]", {
+    stage,
+    message: error instanceof Error ? error.message : "Unknown error",
+    ...meta,
+  });
 }
 
 function isTrialExpired(brand: BrandRecord) {
@@ -65,9 +79,11 @@ async function mapWithConcurrency<T, TResult>(
 export async function runAnalysisCycle({
   brand,
   siteAnalysis,
+  supabaseClient,
 }: {
   brand: BrandRecord;
   siteAnalysis: SiteAnalysisRecord | null;
+  supabaseClient?: SupabaseClient;
 }): Promise<CycleRunSummary> {
   if (!brand.onboarding_complete) {
     throw new Error("Complete onboarding before running a cycle.");
@@ -81,7 +97,7 @@ export async function runAnalysisCycle({
     throw new Error("The free trial has ended. Update billing before starting a new cycle.");
   }
 
-  const supabase = createClient();
+  const supabase = supabaseClient ?? createClient();
   const config = getTierAnalysisConfig(brand.subscription_tier);
   const promptLibrary = generatePromptLibrary({
     brand,
@@ -204,21 +220,41 @@ export async function runAnalysisCycle({
       created_at: new Date().toISOString(),
     }));
 
+    const completedCycleRecord: CycleRecord = {
+      ...cycle,
+      status: "complete",
+      total_prompts: results.length,
+      mention_count: mentionCount,
+      visibility_score: visibilityScore,
+      completed_at: new Date().toISOString(),
+    };
+
     try {
       await generateCycleContent({
         brand,
-        cycle: {
-          ...cycle,
-          status: "complete",
-          total_prompts: results.length,
-          mention_count: mentionCount,
-          visibility_score: visibilityScore,
-          completed_at: new Date().toISOString(),
-        },
+        cycle: completedCycleRecord,
         prompts: promptRecordsForPostProcessing,
         siteAnalysis,
+        supabaseClient: supabase,
       });
+    } catch (error) {
+      logPostCycleFailure("generate_content", error, { cycleId: cycle.id });
+    }
 
+    if (config.influencerMatching) {
+      try {
+        await generateCycleInfluencerMatches({
+          brand,
+          cycle: completedCycleRecord,
+          prompts: promptRecordsForPostProcessing,
+          siteAnalysis,
+        });
+      } catch (error) {
+        logPostCycleFailure("generate_influencers", error, { cycleId: cycle.id });
+      }
+    }
+
+    try {
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -228,8 +264,8 @@ export async function runAnalysisCycle({
         recipientEmail: user?.email ?? null,
         sendEmail: true,
       });
-    } catch {
-      // Keep the analysis cycle marked complete even if post-cycle deliverables need a manual retry.
+    } catch (error) {
+      logPostCycleFailure("generate_report", error, { cycleId: cycle.id });
     }
 
     return {

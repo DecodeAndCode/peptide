@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { generateAndStoreCycleReport } from "@/lib/reports/report-service";
+import { enforceRateLimit, enforceSameOrigin } from "@/lib/security";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -11,6 +12,12 @@ const requestSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const sameOriginError = enforceSameOrigin(request);
+
+  if (sameOriginError) {
+    return sameOriginError;
+  }
+
   const supabase = createClient();
   const {
     data: { user },
@@ -18,6 +25,16 @@ export async function POST(request: Request) {
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  const rateLimitError = await enforceRateLimit({
+    request,
+    bucket: "report",
+    userId: user.id,
+  });
+
+  if (rateLimitError) {
+    return rateLimitError;
   }
 
   const payload = await request.json().catch(() => null);

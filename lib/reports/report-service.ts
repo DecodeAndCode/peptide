@@ -1,6 +1,7 @@
 import "server-only";
 import { Resend } from "resend";
 import { getCycleReportData } from "@/lib/dashboard";
+import { formatRoundedValue, formatSignedRoundedValue } from "@/lib/formatting";
 import { buildCycleReportPdf } from "@/lib/reports/pdf-builder";
 import { getAppUrl, getResendApiKey } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
@@ -103,10 +104,10 @@ export async function generateAndStoreCycleReport({
   const resend = getResendClient();
 
   if (sendEmail && resend && recipientEmail) {
-    const visibilityScore = data.executiveSummary.visibilityScore.toFixed(1);
+    const visibilityScore = formatRoundedValue(data.executiveSummary.visibilityScore);
     const delta = data.executiveSummary.visibilityDelta;
     const deltaText =
-      delta === null ? "Baseline cycle" : `${delta >= 0 ? "+" : ""}${delta.toFixed(1)} points vs. last cycle`;
+      delta === null ? "Baseline cycle" : `${formatSignedRoundedValue(delta)} points vs. last cycle`;
 
     await resend.emails.send({
       from: "SuppGo Reports <onboarding@resend.dev>",
@@ -118,7 +119,7 @@ export async function generateAndStoreCycleReport({
         `<p>${deltaText}</p>`,
         `<p>Top win: ${data.executiveSummary.topWin}</p>`,
         `<p>Top miss: ${data.executiveSummary.topMiss}</p>`,
-        `<p><a href="${getAppUrl()}/dashboard/reports/${data.cycle.id}">Open the in-app report</a></p>`,
+        `<p><a href="${getAppUrl()}/reports/${data.cycle.id}">Open the in-app report</a></p>`,
         signedUrlData.signedUrl
           ? `<p><a href="${signedUrlData.signedUrl}">Download the PDF report (expires in 1 hour)</a></p>`
           : "",

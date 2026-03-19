@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { enforceSameOrigin } from "@/lib/security";
 import { createClient } from "@/lib/supabase/server";
 
 const subscriptionSchema = z.object({
@@ -7,6 +8,12 @@ const subscriptionSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const sameOriginError = enforceSameOrigin(request);
+
+  if (sameOriginError) {
+    return sameOriginError;
+  }
+
   const supabase = createClient();
   const {
     data: { user },

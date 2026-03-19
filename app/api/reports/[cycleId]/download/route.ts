@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSignedReportDownloadUrl } from "@/lib/reports/report-service";
+import { enforceRateLimit } from "@/lib/security";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
@@ -26,6 +27,16 @@ export async function GET(
 
   if (!user) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  }
+
+  const rateLimitError = await enforceRateLimit({
+    request: _request,
+    bucket: "report",
+    userId: user.id,
+  });
+
+  if (rateLimitError) {
+    return rateLimitError;
   }
 
   try {

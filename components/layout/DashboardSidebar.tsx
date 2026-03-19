@@ -6,9 +6,9 @@ import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/dashboard", label: "Overview" },
-  { href: "/dashboard/reports", label: "Reports" },
-  { href: "/dashboard/influencers", label: "Influencers" },
-  { href: "/dashboard/settings", label: "Settings" },
+  { href: "/reports", label: "Reports" },
+  { href: "/influencers", label: "Influencers" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export function DashboardSidebar() {
@@ -23,7 +23,8 @@ export function DashboardSidebar() {
 
         <div className="mt-10 space-y-2">
           {navItems.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive =
+              item.href === "/dashboard" ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`);
 
             return (
               <Link
@@ -44,8 +45,8 @@ export function DashboardSidebar() {
       </div>
 
       <div className="rounded-card border border-white/10 bg-white/5 p-4 text-sm leading-6 text-white/70">
-        Visibility analytics and reports are live here. Influencer workflows arrive in the next
-        build step.
+        Visibility analytics, reports, influencer discovery, and brand settings now live in the
+        dashboard shell.
       </div>
     </aside>
   );

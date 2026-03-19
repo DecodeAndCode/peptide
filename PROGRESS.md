@@ -13,9 +13,9 @@
 - [x] Step 10: Dashboard overview
 - [x] Step 11: Reports (in-app + PDF + email)
 - [x] Step 12: Content generator
-- [ ] Step 13: Influencer matching
-- [ ] Step 14: Settings page
-- [ ] Step 15: Security hardening
+- [x] Step 13: Influencer matching
+- [x] Step 14: Settings page
+- [x] Step 15: Security hardening
 
 ## Deviations from prompt
 - Pricing card copy aligned to Section 11 (source of truth) rather
@@ -41,6 +41,13 @@
   draft generation to respect tier model gating
 - Resend delivery currently uses the Resend test sender
   (`onboarding@resend.dev`) until a verified SuppGo sender domain exists
+- App Router route groups mean authenticated pages resolve at `/reports`,
+  `/influencers`, and `/settings` rather than `/dashboard/*` child paths
+- Rate limiting was applied to the repo's current LLM-backed and report
+  endpoints (`/api/cycles/trigger`, `/api/influencers/match`, and report
+  routes) because dedicated `/api/llm/*` endpoints are not present here
+- Added a dev-only verification route and script so TEST_MODE cycles can be
+  run against live Supabase data without relying on browser automation
 
 ## Known issues / TODOs
 - Supabase CLI not yet configured — migrations applied manually for now
@@ -51,18 +58,17 @@
 - Replace the temporary Resend sender (`onboarding@resend.dev`)
   with a verified SuppGo production domain before launch
 
-## Session 5 starting issues
-- Reports sidebar link points to `/dashboard/reports` (404) while the
-  currently working route resolves at `/reports`
-- "View report" button is generating an href with an undefined `cycleId`
-- `generated_content` still has 0 rows after completed cycles, so
-  post-cycle content generation is failing silently
-- Dashboard metric cards show unnecessary decimals such as `40.0`,
-  `100.0%`, and `0.0%`
-- YTD graph shows duplicate `Mar 18` x-axis labels and displays
-  inactive model legend entries
-- Content opportunity card copy should wrap embedded prompt text in
-  quotation marks to avoid run-on phrasing
+## Session 5 fixes shipped
+- Reports navigation now routes to `/reports`, and in-app report links now
+  point to `/reports/[cycleId]`
+- Generated content persistence is fixed with safe post-cycle error logging
+  and fallback draft generation so Starter cycles still store FAQ + llms.txt
+- Dashboard and report numeric displays now render as rounded integers
+- YTD graph now shows a 3-cycle empty state, adds time granularity for
+  duplicate calendar dates, and hides inactive model legend entries
+- Content opportunity copy now wraps embedded prompt text in quotation marks
+- Influencer matching, settings, rate limiting, CSP headers, and same-origin
+  request enforcement are now live
 
 ## Session 4 decisions
 - Keep the temporary Resend sender as `onboarding@resend.dev` for now;
@@ -71,6 +77,10 @@
   Growth receives generated content without Perplexity citation sourcing,
   while Pro retains Perplexity-backed citation research as a differentiator
 
+## Verification
+- Dev verification route confirmed a TEST_MODE Starter cycle completed with
+  10 prompt executions and wrote 4 `generated_content` rows
+- Verified stored content types included `llms_txt` and `faq_snippet`
+
 ## Next session starting point
-Session 5 — resolve documented dashboard/report/content issues before
-proceeding to Step 13
+Post-MVP polish, launch prep, and production integrations

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { enforceSameOrigin } from "@/lib/security";
 import { createClient } from "@/lib/supabase/server";
 
 const onboardingProfileSchema = z.object({
@@ -11,6 +12,12 @@ const onboardingProfileSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const sameOriginError = enforceSameOrigin(request);
+
+  if (sameOriginError) {
+    return sameOriginError;
+  }
+
   const supabase = createClient();
   const {
     data: { user },
