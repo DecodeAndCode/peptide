@@ -55,8 +55,14 @@
   should be switched to a verified SuppGo domain before launch
 
 ## Pre-launch TODOs
-- Replace the temporary Resend sender (`onboarding@resend.dev`)
+- [ ] Replace the temporary Resend sender (`onboarding@resend.dev`)
   with a verified SuppGo production domain before launch
+- [ ] Stripe billing integration
+- [ ] Modash API swap for influencer matching
+- [ ] Supabase CLI configuration
+- [ ] OpenAI + Anthropic org account conversion (for DPAs)
+- [ ] Anthropic Tier 2 upgrade ($40 cumulative spend)
+- [ ] Remove or formalize dev-only verification route
 
 ## Session 5 fixes shipped
 - Reports navigation now routes to `/reports`, and in-app report links now
