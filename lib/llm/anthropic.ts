@@ -10,9 +10,15 @@ import {
 } from "@/lib/llm/shared";
 import type { PromptSentiment } from "@/types";
 
-const client = new Anthropic({
-  apiKey: getAnthropicApiKey(),
-});
+let client: Anthropic | null = null;
+
+function getClient() {
+  client ??= new Anthropic({
+    apiKey: getAnthropicApiKey(),
+  });
+
+  return client;
+}
 
 const sentimentSchema = z.object({
   sentiment: z.enum(["positive", "neutral", "negative", "not_mentioned", "model_refused"]),
@@ -28,7 +34,7 @@ function getFirstTextBlock(content: Anthropic.Messages.Message["content"]) {
 }
 
 export async function queryAnthropic(prompt: string): Promise<LlmTextResponse> {
-  const response = await client.messages.create({
+  const response = await getClient().messages.create({
     model: ANTHROPIC_API_MODEL,
     system: ANALYSIS_SYSTEM_PROMPT,
     temperature: 0.3,
@@ -60,7 +66,7 @@ export async function classifySentimentWithHaiku({
   mentionContext: string | null;
 }): Promise<PromptSentiment> {
   const truncatedResponse = responseText.slice(0, 2400);
-  const response = await client.messages.create({
+  const response = await getClient().messages.create({
     model: ANTHROPIC_SENTIMENT_MODEL,
     system:
       "Classify whether the brand mention is positive, neutral, negative, or not_mentioned. Return only compact JSON.",
@@ -93,7 +99,7 @@ export async function extractBrandMentionsWithHaiku({
   promptText: string;
   responseText: string;
 }) {
-  const response = await client.messages.create({
+  const response = await getClient().messages.create({
     model: ANTHROPIC_SENTIMENT_MODEL,
     system:
       "Extract supplement, wellness, skincare, and consumer health brand or product names from the response. Return compact JSON only.",
