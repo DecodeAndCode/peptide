@@ -87,6 +87,8 @@
 - Dev verification route confirmed a TEST_MODE Starter cycle completed with
   10 prompt executions and wrote 4 `generated_content` rows
 - Verified stored content types included `llms_txt` and `faq_snippet`
+- Verified the Next.js production build succeeds after lazy LLM client
+  initialization removed build-time API key lookups during page data collection
 
 ## Next session starting point
 Post-MVP polish, launch prep, and production integrations
