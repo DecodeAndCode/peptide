@@ -11,6 +11,7 @@ import type {
   InfluencerFollowerRange,
   InfluencerMatchRecord,
   InfluencerPlatform,
+  InfluencerVerificationStatus,
   PromptRecord,
   SiteAnalysisRecord,
 } from "@/types";
@@ -43,7 +44,9 @@ interface DiscoveryCandidate {
   platform: InfluencerPlatform;
   followerEstimate: string;
   topics: string[];
-  sourceUrl: string | null;
+  sourceUrls: string[];
+  verificationStatus: InfluencerVerificationStatus;
+  verificationConfidence: number;
 }
 
 interface ScoredCandidate extends DiscoveryCandidate {
@@ -54,6 +57,9 @@ interface ScoredCandidate extends DiscoveryCandidate {
   outreachMessage: string;
   fitScore: number;
 }
+
+const MIN_INFLUENCER_FOLLOWERS = 3_000;
+const MIN_VERIFICATION_CONFIDENCE = 70;
 
 export interface InfluencerPageData {
   brand: BrandRecord;
@@ -94,6 +100,62 @@ function stripMarkdownCodeFence(value: string) {
 
 function normalizeHandle(value: string) {
   return value.replace(/^@+/, "").trim().toLowerCase();
+}
+
+function dedupeStrings(items: string[]) {
+  return Array.from(new Set(items.map((item) => item.trim()).filter(Boolean)));
+}
+
+function parseFollowerEstimate(value: string) {
+  const normalized = value.trim().toLowerCase().replace(/,/g, "");
+
+  if (!normalized) {
+    return null;
+  }
+
+  const match = normalized.match(/(\d+(?:\.\d+)?)\s*([kmb])?/i);
+
+  if (!match) {
+    return null;
+  }
+
+  const amount = Number(match[1]);
+
+  if (!Number.isFinite(amount)) {
+    return null;
+  }
+
+  const suffix = match[2]?.toLowerCase();
+  const multiplier = suffix === "m" ? 1_000_000 : suffix === "b" ? 1_000_000_000 : suffix === "k" ? 1_000 : 1;
+
+  return Math.round(amount * multiplier);
+}
+
+function extractHandleFromProfileUrl(platform: InfluencerPlatform, value: string) {
+  try {
+    const url = new URL(value);
+    const host = url.hostname.replace(/^www\./, "").replace(/^m\./, "");
+    const pathSegments = url.pathname.split("/").filter(Boolean);
+
+    if (platform === "instagram" && host.endsWith("instagram.com")) {
+      return normalizeHandle(pathSegments[0] ?? "");
+    }
+
+    if (platform === "tiktok" && host.endsWith("tiktok.com")) {
+      const firstSegment = pathSegments[0] ?? "";
+      return normalizeHandle(firstSegment.startsWith("@") ? firstSegment.slice(1) : firstSegment);
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function getMatchingProfileUrls(platform: InfluencerPlatform, handle: string, urls: string[]) {
+  return dedupeStrings(
+    urls.filter((url) => extractHandleFromProfileUrl(platform, url) === normalizeHandle(handle)),
+  );
 }
 
 function parseJsonArray<T>(value: string, schema: z.ZodSchema<T>) {
@@ -139,6 +201,21 @@ function inferFollowerRange(siteAnalysis: SiteAnalysisRecord | null): Influencer
 
 function normalizeFollowerRange(value: string, fallback: InfluencerFollowerRange): InfluencerFollowerRange {
   const normalized = value.toLowerCase();
+  const parsedCount = parseFollowerEstimate(value);
+
+  if (parsedCount !== null) {
+    if (parsedCount >= 200_000) {
+      return "macro_200k+";
+    }
+
+    if (parsedCount >= 50_000) {
+      return "mid_50k_200k";
+    }
+
+    if (parsedCount >= MIN_INFLUENCER_FOLLOWERS) {
+      return "micro_10k_50k";
+    }
+  }
 
   if (normalized.includes("macro") || normalized.includes("200k")) {
     return "macro_200k+";
@@ -159,6 +236,60 @@ function getProfileUrl(platform: InfluencerPlatform, handle: string) {
   return platform === "instagram"
     ? `https://www.instagram.com/${handle}`
     : `https://www.tiktok.com/@${handle}`;
+}
+
+function validateDiscoveryCandidate({
+  handle,
+  platform,
+  followerEstimate,
+  topics,
+  sourceUrl,
+  citationUrls,
+}: {
+  handle: string;
+  platform: InfluencerPlatform;
+  followerEstimate: string;
+  topics: string[];
+  sourceUrl: string | null;
+  citationUrls: string[];
+}) {
+  const normalizedHandle = normalizeHandle(handle);
+  const evidenceUrls = dedupeStrings([sourceUrl ?? "", ...citationUrls]);
+  const matchingProfileUrls = getMatchingProfileUrls(platform, normalizedHandle, evidenceUrls);
+  const parsedFollowerCount = parseFollowerEstimate(followerEstimate);
+  const meetsFollowerFloor = parsedFollowerCount !== null && parsedFollowerCount >= MIN_INFLUENCER_FOLLOWERS;
+
+  if (!normalizedHandle) {
+    return null;
+  }
+
+  if (matchingProfileUrls.length === 0) {
+    return null;
+  }
+
+  if (!meetsFollowerFloor) {
+    return null;
+  }
+
+  const confidence = Math.min(
+    100,
+    55 +
+      Math.min(20, matchingProfileUrls.length * 10) +
+      (sourceUrl && getMatchingProfileUrls(platform, normalizedHandle, [sourceUrl]).length > 0 ? 10 : 0) +
+      10 +
+      Math.min(5, topics.length > 0 ? 5 : 0),
+  );
+
+  return {
+    handle: normalizedHandle,
+    platform,
+    followerEstimate,
+    topics: topics.slice(0, 5),
+    sourceUrls: matchingProfileUrls,
+    verificationStatus:
+      confidence >= MIN_VERIFICATION_CONFIDENCE ? ("grounded" as const) : ("low_confidence" as const),
+    verificationConfidence: confidence,
+  };
 }
 
 function getBrandNicheTags(brand: BrandRecord) {
@@ -199,7 +330,7 @@ function buildDiscoveryQueries({
 
     return `Search for real, active ${platform} creators in the ${niche} space relevant to ${
       brand.brand_name
-    }. Focus on ${followerRange} accounts and use this cycle context to guide relevance: "${gapPrompt}". Vary results for cycle #${
+    }. Focus on ${followerRange} accounts with at least ${MIN_INFLUENCER_FOLLOWERS.toLocaleString()} followers, recent public posting history, and public profiles. Use this cycle context to guide relevance: "${gapPrompt}". Vary results for cycle #${
       cycle.cycle_number
     } so the same creators are not repeated every run.`;
   });
@@ -225,7 +356,8 @@ async function discoverInfluencers({
         [
           query,
           "For each creator you find, return their handle, platform, approximate follower count, and the primary health or wellness topics they cover.",
-          "Return ONLY creators you can verify exist based on live public web results.",
+          `Return ONLY creators you can verify exist based on live public web results, have at least ${MIN_INFLUENCER_FOLLOWERS.toLocaleString()} followers, and have a public profile URL you can cite directly.`,
+          "Do not include private accounts, empty profiles, or creators without a clear platform profile URL.",
           'Return JSON array only: [{"handle":"","platform":"instagram|tiktok","follower_estimate":"","topics":[""],"source_url":"https://..."}].',
           "No preamble. No invented accounts.",
         ].join("\n"),
@@ -237,15 +369,27 @@ async function discoverInfluencers({
         continue;
       }
 
-      candidates.push(
-        ...parsed.map((item) => ({
-          handle: normalizeHandle(item.handle),
+      parsed.forEach((item) => {
+        const validatedCandidate = validateDiscoveryCandidate({
+          handle: item.handle,
           platform: item.platform,
           followerEstimate: item.follower_estimate,
           topics: item.topics,
           sourceUrl: item.source_url ?? null,
-        })),
-      );
+          citationUrls: response.citationUrls,
+        });
+
+        if (!validatedCandidate) {
+          logInfluencerError("reject_candidate", new Error("Candidate failed validation."), {
+            cycleId: cycle.id,
+            platform: item.platform,
+            handle: normalizeHandle(item.handle),
+          });
+          return;
+        }
+
+        candidates.push(validatedCandidate);
+      });
     } catch (error) {
       logInfluencerError("discover", error, { cycleId: cycle.id });
     }
@@ -355,7 +499,9 @@ async function scoreCandidatesWithOpenAi({
         platform: candidate.platform,
         followerEstimate: matched?.followerEstimate ?? "",
         topics: matched?.topics ?? [],
-        sourceUrl: matched?.sourceUrl ?? null,
+        sourceUrls: matched?.sourceUrls ?? [],
+        verificationStatus: matched?.verificationStatus ?? "low_confidence",
+        verificationConfidence: matched?.verificationConfidence ?? 0,
         displayName: candidate.display_name ?? `@${candidate.handle}`,
         followerRange: normalizeFollowerRange(
           candidate.recommended_follower_tier,
@@ -393,6 +539,11 @@ async function saveInfluencerMatches({
   const existing = existingRows ?? [];
 
   const eligibleMatches = matches
+    .filter(
+      (match) =>
+        match.verificationStatus === "grounded" &&
+        match.verificationConfidence >= MIN_VERIFICATION_CONFIDENCE,
+    )
     .filter((match) => {
       const priorRow = existing.find(
         (row) => row.platform === match.platform && normalizeHandle(row.handle) === match.handle,
@@ -419,6 +570,10 @@ async function saveInfluencerMatches({
       niche_tags: match.nicheTags,
       match_reason: match.matchReason,
       outreach_message: match.outreachMessage,
+      source_urls: match.sourceUrls,
+      fit_score: match.fitScore,
+      verification_status: match.verificationStatus,
+      verification_confidence: match.verificationConfidence,
       shown_in_cycle: Array.from(new Set([...(existingRow?.shown_in_cycle ?? []), cycle.cycle_number])).sort(
         (left, right) => left - right,
       ),

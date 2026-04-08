@@ -1,4 +1,9 @@
 import "server-only";
+import {
+  canonicalizeIngredientList,
+  canonicalizeIngredientMentions,
+  findIngredientMentionKeys,
+} from "@/lib/analysis/ingredient-normalization";
 import { INDUSTRY_GAP_KEYWORDS, getTierAnalysisConfig } from "@/lib/suppgo";
 import type {
   BrandRecord,
@@ -239,18 +244,28 @@ function buildEducationSeeds({
   tag: string;
   contentSignals: SiteAnalysisContentSignals | null;
 }) {
+  const ingredientSeeds = canonicalizeIngredientList(contentSignals?.ingredients ?? [], 12);
+  const productSeeds = dedupe(contentSignals?.productNames ?? [], 12).filter(
+    (name) => findIngredientMentionKeys(name).length === 0,
+  );
+
   return dedupe([
-    ...(contentSignals?.ingredients ?? []),
-    ...(contentSignals?.productNames ?? []),
+    ...ingredientSeeds,
+    ...productSeeds,
     ...(INDUSTRY_GAP_KEYWORDS[tag] ?? []),
     ...(contentSignals?.topicKeywords ?? []),
   ]);
 }
 
 function buildInteractionSeeds(contentSignals: SiteAnalysisContentSignals | null) {
+  const ingredientSeeds = canonicalizeIngredientList(contentSignals?.ingredients ?? [], 12);
+  const productSeeds = dedupe(contentSignals?.productNames ?? [], 12).filter(
+    (name) => findIngredientMentionKeys(name).length === 0,
+  );
+
   return dedupe([
-    ...pairItems(dedupe([...(contentSignals?.ingredients ?? []), ...(contentSignals?.productNames ?? [])], 16)),
-    ...GENERIC_INTERACTION_PAIRS,
+    ...pairItems(dedupe([...ingredientSeeds, ...productSeeds], 16)).map(canonicalizeIngredientMentions),
+    ...GENERIC_INTERACTION_PAIRS.map(canonicalizeIngredientMentions),
   ]);
 }
 

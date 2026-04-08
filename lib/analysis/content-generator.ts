@@ -1,6 +1,10 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import {
+  canonicalizeIngredientList,
+  canonicalizeIngredientMentions,
+} from "@/lib/analysis/ingredient-normalization";
 import { queryOpenAi } from "@/lib/llm/openai";
 import { queryPerplexity } from "@/lib/llm/perplexity";
 import { getIndustryLabel, getTierAnalysisConfig } from "@/lib/suppgo";
@@ -77,7 +81,7 @@ function buildSiteContext(siteAnalysis: SiteAnalysisRecord | null) {
   const signals = siteAnalysis?.content_signals;
   return {
     products: signals?.productNames?.slice(0, 8) ?? [],
-    ingredients: signals?.ingredients?.slice(0, 10) ?? [],
+    ingredients: canonicalizeIngredientList(signals?.ingredients ?? [], 10),
     claims: signals?.healthClaims?.slice(0, 6) ?? [],
     faqTopics: signals?.faqTopics?.slice(0, 8) ?? [],
   };
@@ -101,8 +105,13 @@ function getPromptOpportunities(prompts: PromptRecord[], category?: PromptCatego
       return;
     }
 
-    const existing = grouped.get(prompt.prompt_text) ?? {
-      promptText: prompt.prompt_text,
+    const canonicalPromptText =
+      prompt.prompt_category === "product_interaction"
+        ? canonicalizeIngredientMentions(prompt.prompt_text)
+        : prompt.prompt_text;
+
+    const existing = grouped.get(canonicalPromptText) ?? {
+      promptText: canonicalPromptText,
       category: prompt.prompt_category,
       missCount: 0,
       competitorCount: 0,
@@ -110,7 +119,7 @@ function getPromptOpportunities(prompts: PromptRecord[], category?: PromptCatego
 
     existing.missCount += 1;
     existing.competitorCount += prompt.competitors_mentioned?.length ?? 0;
-    grouped.set(prompt.prompt_text, existing);
+    grouped.set(canonicalPromptText, existing);
   });
 
   return Array.from(grouped.values()).sort((left, right) => {
@@ -127,12 +136,13 @@ async function researchInteractionPrompt(
   brand: BrandRecord,
   siteAnalysis: SiteAnalysisRecord | null,
 ) {
+  const canonicalPromptText = canonicalizeIngredientMentions(promptText);
   const siteContext = buildSiteContext(siteAnalysis);
   const tierConfig = getTierAnalysisConfig(brand.subscription_tier);
 
   if (!tierConfig.models.includes("perplexity-sonar-pro")) {
     return {
-      summary: `Draft this content around the interaction query "${promptText}" using the brand's existing products, ingredients, and onboarding content signals. Prioritize trust-first guidance and plain language over promotional framing.`,
+      summary: `Draft this content around the interaction query "${canonicalPromptText}" using the brand's existing products, ingredients, and onboarding content signals. Prioritize trust-first guidance and plain language over promotional framing.`,
       sources: [],
     };
   }
@@ -140,11 +150,12 @@ async function researchInteractionPrompt(
   const researchResponse = await queryPerplexity(
     [
       "Research the supplement or wellness product interaction question below.",
-      `Question: ${promptText}`,
+      `Question: ${canonicalPromptText}`,
       `Brand: ${brand.brand_name}`,
       `Known products: ${siteContext.products.join(", ") || "Unknown"}`,
       `Known ingredients: ${siteContext.ingredients.join(", ") || "Unknown"}`,
       "Summarize the most useful evidence in concise prose suitable for a brand FAQ draft.",
+      "Treat ingredient aliases as the same ingredient and prefer the canonical ingredient naming used in Known ingredients.",
       "Focus on safety context, interaction nuance, and trustworthy medical framing.",
       "Do not recommend speaking to a doctor unless a real safety caveat is central to the answer.",
     ].join("\n"),
@@ -189,11 +200,13 @@ function buildFallbackFaqBody(
 }
 
 function buildFallbackFaqPrompt(prompts: PromptRecord[], siteAnalysis: SiteAnalysisRecord | null) {
-  return (
+  return canonicalizeIngredientMentions(
+    (
     prompts.find((prompt) => prompt.prompt_category === "product_interaction")?.prompt_text ??
     prompts[0]?.prompt_text ??
     siteAnalysis?.content_signals?.faqTopics?.[0] ??
     "What should I know about using these products together?"
+    ),
   );
 }
 
@@ -203,17 +216,19 @@ async function generateProductInteractionArticle(
   siteAnalysis: SiteAnalysisRecord | null,
 ) {
   try {
+    const canonicalPromptText = canonicalizeIngredientMentions(promptText);
     const siteContext = buildSiteContext(siteAnalysis);
-    const research = await researchInteractionPrompt(promptText, brand, siteAnalysis);
+    const research = await researchInteractionPrompt(canonicalPromptText, brand, siteAnalysis);
     const response = await queryOpenAi(
       [
         "You are a medical content writer for a consumer health brand.",
         `Brand: ${brand.brand_name}`,
         `Industry categories: ${brand.industry_tags.map(getIndustryLabel).join(", ") || "Unknown"}`,
         `Hero products/ingredients: ${[...siteContext.products, ...siteContext.ingredients].slice(0, 10).join(", ") || "Unknown"}`,
-        `Query this content should answer: ${promptText}`,
+        `Query this content should answer: ${canonicalPromptText}`,
         `Research findings: ${research.summary}`,
         `Approved citations: ${research.sources.join(", ") || "None available"}`,
+        "If two ingredient names refer to the same ingredient, collapse them into one canonical name instead of treating them as separate ingredients.",
         "Write a 200-300 word FAQ answer that directly answers the query, stays trustworthy, references the brand naturally where relevant, includes at least two provided citations inline when available, and ends with the disclaimer sentence exactly as written in the prompt spec.",
         'Return JSON only in the form {"title":"","body":"","cited_sources":[],"target_query":""}.',
       ].join("\n"),
@@ -226,7 +241,7 @@ async function generateProductInteractionArticle(
         content_type: "product_interaction" as const,
         title: parsed.data.title,
         body: parsed.data.body,
-        target_prompts: [parsed.data.target_query],
+        target_prompts: [canonicalizeIngredientMentions(parsed.data.target_query)],
         medical_sources: filterAuthoritySources(
           parsed.data.cited_sources.length > 0 ? parsed.data.cited_sources : research.sources,
         ),
@@ -235,18 +250,19 @@ async function generateProductInteractionArticle(
 
     return {
       content_type: "product_interaction" as const,
-      title: promptText,
-      body: buildFallbackProductInteractionBody(brand, promptText, research.sources, siteAnalysis),
-      target_prompts: [promptText],
+      title: canonicalPromptText,
+      body: buildFallbackProductInteractionBody(brand, canonicalPromptText, research.sources, siteAnalysis),
+      target_prompts: [canonicalPromptText],
       medical_sources: research.sources,
     };
   } catch (error) {
     logContentGenerationError("product_interaction", error, { contentType: "product_interaction" });
+    const canonicalPromptText = canonicalizeIngredientMentions(promptText);
     return {
       content_type: "product_interaction" as const,
-      title: promptText,
-      body: buildFallbackProductInteractionBody(brand, promptText, [], siteAnalysis),
-      target_prompts: [promptText],
+      title: canonicalPromptText,
+      body: buildFallbackProductInteractionBody(brand, canonicalPromptText, [], siteAnalysis),
+      target_prompts: [canonicalPromptText],
       medical_sources: [],
     };
   }
@@ -258,14 +274,16 @@ async function generateFaqSnippet(
   siteAnalysis: SiteAnalysisRecord | null,
 ) {
   try {
+    const canonicalPromptText = canonicalizeIngredientMentions(promptText);
     const siteContext = buildSiteContext(siteAnalysis);
     const response = await queryOpenAi(
       [
         "Write a concise FAQ snippet for a consumer health brand.",
         `Brand: ${brand.brand_name}`,
-        `Question: ${promptText}`,
+        `Question: ${canonicalPromptText}`,
         `Known products: ${siteContext.products.join(", ") || "Unknown"}`,
         `Known ingredients: ${siteContext.ingredients.join(", ") || "Unknown"}`,
+        "If ingredient aliases refer to the same ingredient, use one canonical ingredient name consistently.",
         "Keep the answer around 90-140 words, lead with a direct answer, mention the brand naturally if relevant, and end with the disclaimer sentence exactly: This content is for informational purposes only and does not constitute medical advice.",
         'Return JSON only in the form {"title":"","body":"","cited_sources":[],"target_query":""}.',
       ].join("\n"),
@@ -278,25 +296,26 @@ async function generateFaqSnippet(
         content_type: "faq_snippet" as const,
         title: parsed.data.title,
         body: parsed.data.body,
-        target_prompts: [parsed.data.target_query],
+        target_prompts: [canonicalizeIngredientMentions(parsed.data.target_query)],
         medical_sources: [],
       };
     }
 
     return {
       content_type: "faq_snippet" as const,
-      title: promptText,
-      body: buildFallbackFaqBody(brand, promptText),
-      target_prompts: [promptText],
+      title: canonicalPromptText,
+      body: buildFallbackFaqBody(brand, canonicalPromptText),
+      target_prompts: [canonicalPromptText],
       medical_sources: [],
     };
   } catch (error) {
     logContentGenerationError("faq_snippet", error, { contentType: "faq_snippet" });
+    const canonicalPromptText = canonicalizeIngredientMentions(promptText);
     return {
       content_type: "faq_snippet" as const,
-      title: promptText,
-      body: buildFallbackFaqBody(brand, promptText),
-      target_prompts: [promptText],
+      title: canonicalPromptText,
+      body: buildFallbackFaqBody(brand, canonicalPromptText),
+      target_prompts: [canonicalPromptText],
       medical_sources: [],
     };
   }

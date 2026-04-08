@@ -1,4 +1,5 @@
 import * as cheerio from "cheerio";
+import { canonicalizeIngredientList } from "@/lib/analysis/ingredient-normalization";
 import { INDUSTRY_GAP_KEYWORDS, getIndustryLabel } from "@/lib/suppgo";
 import type { SiteAnalysisContentSignals } from "@/types";
 
@@ -121,7 +122,7 @@ function extractSignalsFromPage(page: CrawledPage) {
     urls: [page.url],
     hasSchemaMarkup: $("script[type='application/ld+json']").length > 0,
     productNames: dedupe(productNames, 8),
-    ingredients: dedupe(ingredients ?? [], 10),
+    ingredients: canonicalizeIngredientList(ingredients ?? [], 10),
     healthClaims: dedupe(healthClaims, 8),
     faqTopics: dedupe(faqTopics, 8),
     topicKeywords: extractTopicKeywords(text),
@@ -297,7 +298,7 @@ export async function analyzeSite(
       llmsTxtContent,
     }),
     productNames: dedupe(pageSignals.flatMap((signal) => signal.productNames)),
-    ingredients: dedupe(pageSignals.flatMap((signal) => signal.ingredients)),
+    ingredients: canonicalizeIngredientList(pageSignals.flatMap((signal) => signal.ingredients)),
     healthClaims: dedupe(pageSignals.flatMap((signal) => signal.healthClaims)),
     faqTopics: dedupe(pageSignals.flatMap((signal) => signal.faqTopics)),
     topicKeywords: dedupe(pageSignals.flatMap((signal) => signal.topicKeywords), 12),

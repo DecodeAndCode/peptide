@@ -3,6 +3,7 @@ export type SubscriptionStatus = "trial" | "active" | "cancelled";
 export type CycleStatus = "pending" | "running" | "complete" | "failed";
 export type InfluencerPlatform = "instagram" | "tiktok";
 export type InfluencerFollowerRange = "micro_10k_50k" | "mid_50k_200k" | "macro_200k+";
+export type InfluencerVerificationStatus = "grounded" | "low_confidence";
 export type PromptCategory =
   | "explicit_recommendation"
   | "problem_solution"
@@ -103,6 +104,10 @@ export interface InfluencerMatchRecord {
   niche_tags: string[];
   match_reason: string | null;
   outreach_message: string | null;
+  source_urls: string[];
+  fit_score: number | null;
+  verification_status: InfluencerVerificationStatus | null;
+  verification_confidence: number | null;
   shown_in_cycle: number[];
   created_at: string;
 }

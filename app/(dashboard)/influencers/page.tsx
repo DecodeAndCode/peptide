@@ -21,6 +21,18 @@ function formatFollowerRange(value: string | null) {
   return "Follower tier pending";
 }
 
+function formatVerificationLabel(status: string | null, confidence: number | null) {
+  if (status === "grounded") {
+    return `Grounded ${confidence ?? 0}/100`;
+  }
+
+  if (status === "low_confidence") {
+    return `Low confidence ${confidence ?? 0}/100`;
+  }
+
+  return "Needs refresh";
+}
+
 export default async function InfluencersPage() {
   const data = await getInfluencerPageData();
 
@@ -47,9 +59,10 @@ export default async function InfluencersPage() {
               Public-web creator discovery for brand-fit outreach
             </h2>
             <p className="mt-4 max-w-3xl text-sm leading-7 text-mid">
-              Influencer suggestions are sourced from public web data via Perplexity. Verify
-              profiles and follower counts before outreach. SuppGo does not guarantee accuracy of
-              third-party account data.
+              Influencer suggestions are sourced from public web data via Perplexity and only saved
+              when SuppGo can ground them to matching platform URLs with an estimated follower
+              floor. Still verify profile quality before outreach because third-party account data
+              can change.
             </p>
           </div>
           {tierConfig.influencerMatching ? <RefreshInfluencerMatchesButton /> : null}
@@ -91,6 +104,9 @@ export default async function InfluencersPage() {
                       {match.platform === "instagram" ? "Instagram" : "TikTok"}
                     </Badge>
                     <Badge variant="gold">{formatFollowerRange(match.follower_range)}</Badge>
+                    <Badge variant="sage" className="bg-sage/15 text-sage-light border-sage/20">
+                      {formatVerificationLabel(match.verification_status, match.verification_confidence)}
+                    </Badge>
                   </div>
                   <h3 className="mt-4 font-display text-2xl text-white">
                     {match.display_name ?? `@${match.handle}`}
@@ -113,6 +129,22 @@ export default async function InfluencersPage() {
               <p className="mt-5 text-sm leading-7 text-white/75">
                 {match.match_reason ?? "Brand-fit rationale will appear here once scoring completes."}
               </p>
+
+              {match.source_urls?.length ? (
+                <div className="mt-5 flex flex-wrap gap-3 text-xs text-white/60">
+                  {match.source_urls.slice(0, 2).map((url) => (
+                    <a
+                      key={url}
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline decoration-white/20 underline-offset-4 hover:text-white"
+                    >
+                      Source evidence
+                    </a>
+                  ))}
+                </div>
+              ) : null}
 
               <div className="mt-5 flex flex-wrap gap-2">
                 {match.niche_tags.map((tag) => (
