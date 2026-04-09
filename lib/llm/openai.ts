@@ -14,25 +14,34 @@ function getClient() {
 }
 
 export async function queryOpenAi(prompt: string): Promise<LlmTextResponse> {
-  const response = await getClient().responses.create({
-    model: OPENAI_API_MODEL,
-    temperature: 0.3,
-    max_output_tokens: 800,
-    input: [
-      {
-        role: "system",
-        content: ANALYSIS_SYSTEM_PROMPT,
-      },
-      {
-        role: "user",
-        content: prompt,
-      },
-    ],
-  });
+  try {
+    const response = await getClient().responses.create({
+      model: OPENAI_API_MODEL,
+      temperature: 0.3,
+      max_output_tokens: 800,
+      input: [
+        {
+          role: "system",
+          content: ANALYSIS_SYSTEM_PROMPT,
+        },
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+    });
 
-  return {
-    model: "gpt-4o",
-    text: response.output_text.trim(),
-    citationUrls: [],
-  };
+    return {
+      model: "gpt-4o",
+      text: response.output_text.trim(),
+      citationUrls: [],
+    };
+  } catch (error) {
+    console.error("[openai]", {
+      model: OPENAI_API_MODEL,
+      promptPreview: prompt.slice(0, 160),
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+    throw error;
+  }
 }

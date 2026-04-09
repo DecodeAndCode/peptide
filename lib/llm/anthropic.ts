@@ -34,24 +34,33 @@ function getFirstTextBlock(content: Anthropic.Messages.Message["content"]) {
 }
 
 export async function queryAnthropic(prompt: string): Promise<LlmTextResponse> {
-  const response = await getClient().messages.create({
-    model: ANTHROPIC_API_MODEL,
-    system: ANALYSIS_SYSTEM_PROMPT,
-    temperature: 0.3,
-    max_tokens: 800,
-    messages: [
-      {
-        role: "user",
-        content: prompt,
-      },
-    ],
-  });
+  try {
+    const response = await getClient().messages.create({
+      model: ANTHROPIC_API_MODEL,
+      system: ANALYSIS_SYSTEM_PROMPT,
+      temperature: 0.3,
+      max_tokens: 800,
+      messages: [
+        {
+          role: "user",
+          content: prompt,
+        },
+      ],
+    });
 
-  return {
-    model: "claude-sonnet",
-    text: getFirstTextBlock(response.content),
-    citationUrls: [],
-  };
+    return {
+      model: "claude-sonnet",
+      text: getFirstTextBlock(response.content),
+      citationUrls: [],
+    };
+  } catch (error) {
+    console.error("[anthropic]", {
+      model: ANTHROPIC_API_MODEL,
+      promptPreview: prompt.slice(0, 160),
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+    throw error;
+  }
 }
 
 export async function classifySentimentWithHaiku({

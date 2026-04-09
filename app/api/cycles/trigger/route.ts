@@ -83,7 +83,14 @@ export async function POST(request: Request) {
     });
 
     return NextResponse.json({ cycle: summary });
-  } catch {
+  } catch (error) {
+    console.error("[cycles/trigger]", {
+      message: error instanceof Error ? error.message : "Unknown error",
+      brandId: brand.id,
+      userId: user.id,
+      tier: brand.subscription_tier,
+      hasSiteAnalysis: Boolean(latestSiteAnalysis?.id),
+    });
     return NextResponse.json(
       { error: "We couldn't complete the analysis cycle right now. Please retry shortly." },
       { status: 500 },

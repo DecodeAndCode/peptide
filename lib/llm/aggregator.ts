@@ -12,15 +12,24 @@ import type {
 } from "@/types";
 
 async function runModelQuery(model: PromptModel, promptText: string) {
-  if (model === "gpt-4o") {
-    return queryOpenAi(promptText);
-  }
+  try {
+    if (model === "gpt-4o") {
+      return await queryOpenAi(promptText);
+    }
 
-  if (model === "claude-sonnet") {
-    return queryAnthropic(promptText);
-  }
+    if (model === "claude-sonnet") {
+      return await queryAnthropic(promptText);
+    }
 
-  return queryPerplexity(promptText);
+    return await queryPerplexity(promptText);
+  } catch (error) {
+    console.error("[llm-query]", {
+      model,
+      promptPreview: promptText.slice(0, 160),
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+    throw error;
+  }
 }
 
 export async function runPromptAcrossModels({
