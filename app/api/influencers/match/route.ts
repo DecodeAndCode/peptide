@@ -6,6 +6,7 @@ import { getTierAnalysisConfig } from "@/lib/suppgo";
 import type { BrandRecord, CycleRecord, PromptRecord, SiteAnalysisRecord } from "@/types";
 
 export const runtime = "nodejs";
+export const maxDuration = 120;
 
 export async function POST(request: Request) {
   const sameOriginError = enforceSameOrigin(request);

@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { BrandRecord, CycleRecord, SiteAnalysisRecord } from "@/types";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   const sameOriginError = enforceSameOrigin(request);

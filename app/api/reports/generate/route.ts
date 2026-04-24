@@ -5,6 +5,7 @@ import { enforceRateLimit, enforceSameOrigin } from "@/lib/security";
 import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
+export const maxDuration = 300;
 
 const requestSchema = z.object({
   cycleId: z.string().uuid(),

@@ -4,6 +4,9 @@ import { analyzeSite } from "@/lib/analysis/site-crawler";
 import { enforceSameOrigin } from "@/lib/security";
 import { createClient } from "@/lib/supabase/server";
 
+export const runtime = "nodejs";
+export const maxDuration = 120;
+
 const analyzeSiteSchema = z.object({
   brandName: z.string().trim().min(2).max(120),
   websiteUrl: z.url(),

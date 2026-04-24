@@ -56,7 +56,6 @@ export async function queryAnthropic(prompt: string): Promise<LlmTextResponse> {
   } catch (error) {
     console.error("[anthropic]", {
       model: ANTHROPIC_API_MODEL,
-      promptPreview: prompt.slice(0, 160),
       message: error instanceof Error ? error.message : "Unknown error",
     });
     throw error;

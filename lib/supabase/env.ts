@@ -49,7 +49,9 @@ export function getUpstashRedisRestToken() {
 }
 
 export function isUpstashConfigured() {
-  return Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+  const url = process.env.UPSTASH_REDIS_REST_URL?.trim();
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN?.trim();
+  return Boolean(url && token && url.startsWith("https://"));
 }
 
 export function isSuppgoTestModeEnabled() {
@@ -66,6 +68,21 @@ export function isSuppgoTestModeEnabled() {
   return process.env.NODE_ENV !== "production";
 }
 
+function parsePositiveInteger(value: string | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
 export function getSuppgoTestModePromptExecutionCap() {
+  const explicitCap = parsePositiveInteger(process.env.SUPPGO_TEST_MODE_PROMPT_EXECUTIONS);
+
+  if (explicitCap) {
+    return explicitCap;
+  }
+
   return 10;
 }

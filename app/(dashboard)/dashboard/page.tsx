@@ -128,8 +128,8 @@ export default async function DashboardPage() {
             <TriggerCycleButton />
           </div>
           <p className="mt-4 text-xs leading-6 text-mid">
-            When test mode is enabled, the runner trims the cycle before model dispatch so total
-            executions never exceed ten.
+            When test mode is enabled, the runner trims the cycle before model dispatch according
+            to your configured test execution cap.
           </p>
         </Card>
       </div>

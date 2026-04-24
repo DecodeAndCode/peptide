@@ -25,7 +25,6 @@ async function runModelQuery(model: PromptModel, promptText: string) {
   } catch (error) {
     console.error("[llm-query]", {
       model,
-      promptPreview: promptText.slice(0, 160),
       message: error instanceof Error ? error.message : "Unknown error",
     });
     throw error;

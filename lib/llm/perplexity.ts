@@ -75,7 +75,6 @@ export async function queryPerplexity(prompt: string): Promise<LlmTextResponse> 
   } catch (error) {
     console.error("[perplexity]", {
       model: PERPLEXITY_API_MODEL,
-      promptPreview: prompt.slice(0, 160),
       message: error instanceof Error ? error.message : "Unknown error",
     });
     throw error;

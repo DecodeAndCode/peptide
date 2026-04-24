@@ -88,7 +88,20 @@ export async function enforceRateLimit({
     return null;
   }
 
-  const result = await limiter.limit(getRateLimitIdentifier(request, userId));
+  let result: Awaited<ReturnType<Ratelimit["limit"]>>;
+
+  try {
+    result = await limiter.limit(getRateLimitIdentifier(request, userId));
+  } catch (error) {
+    // Fail open: if Upstash is unreachable (dead DB, DNS failure, network blip),
+    // we explicitly prefer to let the request through rather than 500 the whole
+    // endpoint. Restore strict enforcement once a healthy Upstash is wired back up.
+    console.warn("[rate-limit]", {
+      bucket,
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
+    return null;
+  }
 
   if (result.success) {
     return null;
