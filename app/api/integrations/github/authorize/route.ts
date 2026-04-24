@@ -37,7 +37,7 @@ export async function GET(request: Request) {
   const params = new URLSearchParams({
     client_id: getGitHubClientId(),
     redirect_uri: redirectUri,
-    scope: "contents,pull_requests",
+    scope: "repo",
     state,
   });
 
