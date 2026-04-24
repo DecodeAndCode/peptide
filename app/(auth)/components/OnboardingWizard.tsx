@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { INDUSTRY_OPTIONS, SUBSCRIPTION_PLANS } from "@/lib/suppgo";
 import type { BrandRecord, SiteAnalysisRecord, SubscriptionTier } from "@/types";
 
-type WizardStep = 1 | 2 | 3;
+type WizardStep = 1 | 2 | 3 | 4;
 
 interface OnboardingWizardProps {
   initialBrand: BrandRecord | null;
@@ -100,6 +100,7 @@ export function OnboardingWizard({
   const [savingProfile, setSavingProfile] = useState(false);
   const [runningAnalysis, setRunningAnalysis] = useState(false);
   const [startingTrial, setStartingTrial] = useState(false);
+  const [pendingRedirect, setPendingRedirect] = useState<string | null>(null);
 
   useEffect(() => {
     if (!runningAnalysis) {
@@ -225,8 +226,9 @@ export function OnboardingWizard({
       return;
     }
 
-    router.push(result.redirectTo);
-    router.refresh();
+    // Save the destination and move to the optional site-integration step
+    setPendingRedirect(result.redirectTo);
+    setStep(4);
   }
 
   return (
@@ -246,7 +248,7 @@ export function OnboardingWizard({
         </div>
 
         <div className="flex gap-3">
-          {[1, 2, 3].map((item) => (
+          {[1, 2, 3, 4].map((item) => (
             <div
               key={item}
               className={`flex h-11 w-11 items-center justify-center rounded-full border text-sm font-medium ${
@@ -598,7 +600,74 @@ export function OnboardingWizard({
                     disabled={startingTrial}
                     className="btn-primary min-w-[220px]"
                   >
-                    {startingTrial ? "Starting trial..." : "Start free trial"}
+                    {startingTrial ? "Starting trial..." : "Continue to site integration"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
+            {step === 4 ? (
+              <div className="space-y-6">
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-[1.8px] text-sage">
+                    Step 4 — Optional
+                  </div>
+                  <h2 className="mt-2 font-display text-3xl text-dark">
+                    Connect your website
+                  </h2>
+                  <p className="mt-3 max-w-2xl text-sm leading-7 text-mid">
+                    SuppGo can push generated content directly to your site via GitHub Pull Request
+                    — no copy-paste required. You can connect now or do this later from Settings.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-3">
+                  <a
+                    href="/api/integrations/github/authorize?from=onboarding"
+                    className="flex flex-col gap-3 rounded-card border border-sage/20 bg-white p-5 text-left transition hover:border-sage hover:bg-sage/5"
+                  >
+                    <div className="text-2xl">⬡</div>
+                    <div className="font-medium text-dark">GitHub</div>
+                    <p className="text-sm leading-6 text-mid">
+                      Best for Next.js, Gatsby, or any code-based site. SuppGo opens a PR with new
+                      markdown files after each cycle.
+                    </p>
+                    <span className="mt-auto inline-block rounded-pill bg-sage/10 px-3 py-1 text-xs font-medium text-sage">
+                      Connect GitHub →
+                    </span>
+                  </a>
+
+                  <div className="flex flex-col gap-3 rounded-card border border-sage/10 bg-white/60 p-5 text-left opacity-60">
+                    <div className="text-2xl">◈</div>
+                    <div className="font-medium text-dark">Headless CMS</div>
+                    <p className="text-sm leading-6 text-mid">
+                      Webflow, Contentful, Sanity, or Shopify. SuppGo creates draft entries in
+                      your CMS after each cycle.
+                    </p>
+                    <span className="mt-auto inline-block rounded-pill bg-sage/10 px-3 py-1 text-xs font-medium text-mid">
+                      Coming soon
+                    </span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (pendingRedirect) {
+                        router.push(pendingRedirect);
+                        router.refresh();
+                      }
+                    }}
+                    className="flex flex-col gap-3 rounded-card border border-sage/10 bg-white/60 p-5 text-left transition hover:border-sage/30 hover:bg-white"
+                  >
+                    <div className="text-2xl">→</div>
+                    <div className="font-medium text-dark">Skip for now</div>
+                    <p className="text-sm leading-6 text-mid">
+                      Content will appear in your dashboard for manual review and copy. You can
+                      connect a site integration at any time from Settings.
+                    </p>
+                    <span className="mt-auto inline-block rounded-pill bg-sage/10 px-3 py-1 text-xs font-medium text-sage">
+                      Go to dashboard →
+                    </span>
                   </button>
                 </div>
               </div>
@@ -615,6 +684,7 @@ export function OnboardingWizard({
               <p>Step 1 creates or updates the single brand record tied to your user.</p>
               <p>Step 2 stores a site analysis snapshot that future cycles can build from.</p>
               <p>Step 3 marks the selected tier as a trial and opens the dashboard shell.</p>
+              <p>Step 4 optionally connects GitHub so content flows directly into your site as a PR.</p>
             </div>
           </Card>
 

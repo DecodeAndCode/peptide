@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { Card } from "@/components/ui/Card";
 import { INDUSTRY_OPTIONS, SUBSCRIPTION_PLANS } from "@/lib/suppgo";
-import type { BrandRecord, SubscriptionTier } from "@/types";
+import type { BrandRecord, GitHubIntegrationStatus, SubscriptionTier } from "@/types";
 
 interface SettingsPageClientProps {
   brand: BrandRecord;
+  githubIntegration: GitHubIntegrationStatus;
 }
 
 function parseAliasInput(value: string) {
@@ -24,7 +25,7 @@ function getInitialCompetitors(competitorUrls: string[]) {
   return [...competitorUrls, ...Array.from({ length: Math.max(0, 5 - competitorUrls.length) }, () => "")].slice(0, 5);
 }
 
-export function SettingsPageClient({ brand }: SettingsPageClientProps) {
+export function SettingsPageClient({ brand, githubIntegration }: SettingsPageClientProps) {
   const [brandName, setBrandName] = useState(brand.brand_name);
   const [websiteUrl, setWebsiteUrl] = useState(brand.website_url);
   const [brandAliasesText, setBrandAliasesText] = useState((brand.brand_aliases ?? []).join(", "));
@@ -37,6 +38,85 @@ export function SettingsPageClient({ brand }: SettingsPageClientProps) {
   const [tierMessage, setTierMessage] = useState<string | null>(null);
   const [isTierPending, startTierTransition] = useTransition();
   const [confirmingTier, setConfirmingTier] = useState<SubscriptionTier | null>(null);
+
+  // GitHub integration state
+  const [github, setGithub] = useState<GitHubIntegrationStatus>(githubIntegration);
+  const [githubRepo, setGithubRepo] = useState(githubIntegration.repo_full_name ?? "");
+  const [githubDir, setGithubDir] = useState(githubIntegration.content_dir ?? "");
+  const [githubMessage, setGithubMessage] = useState<string | null>(null);
+  const [isGithubPending, startGithubTransition] = useTransition();
+  const [repos, setRepos] = useState<{ full_name: string; name: string; private: boolean }[]>([]);
+  const [loadingRepos, setLoadingRepos] = useState(false);
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+
+  // Show success message if redirected back from GitHub OAuth
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("github") === "connected") {
+      setGithubMessage("GitHub connected successfully. Select a repository below.");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    if (params.get("error")?.startsWith("github_")) {
+      setGithubMessage("GitHub connection failed. Please try again.");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  async function loadRepos() {
+    setLoadingRepos(true);
+    setGithubMessage(null);
+    const res = await fetch("/api/integrations/github/repos");
+    const data = (await res.json().catch(() => null)) as {
+      repos?: { full_name: string; name: string; private: boolean }[];
+      error?: string;
+    } | null;
+    setLoadingRepos(false);
+    if (!res.ok || !data?.repos) {
+      setGithubMessage(data?.error ?? "Failed to load repositories.");
+      return;
+    }
+    setRepos(data.repos);
+  }
+
+  function handleSaveGithubConfig() {
+    if (!githubRepo.trim()) {
+      setGithubMessage("Please select or enter a repository.");
+      return;
+    }
+    setGithubMessage(null);
+    startGithubTransition(async () => {
+      const res = await fetch("/api/integrations/github/config", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repo_full_name: githubRepo.trim(), content_dir: githubDir.trim() }),
+      });
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        setGithubMessage(data?.error ?? "Failed to save configuration.");
+        return;
+      }
+      setGithub((prev) => ({ ...prev, repo_full_name: githubRepo.trim(), content_dir: githubDir.trim() }));
+      setGithubMessage("Repository configuration saved.");
+    });
+  }
+
+  function handleDisconnectGithub() {
+    setGithubMessage(null);
+    setConfirmDisconnect(false);
+    startGithubTransition(async () => {
+      const res = await fetch("/api/integrations/github/disconnect", { method: "DELETE" });
+      if (!res.ok) {
+        setGithubMessage("Failed to disconnect GitHub.");
+        return;
+      }
+      setGithub({ connected: false, repo_full_name: null, content_dir: null, status: "disconnected" });
+      setGithubRepo("");
+      setGithubDir("");
+      setRepos([]);
+      setGithubMessage(null);
+    });
+  }
 
   function toggleIndustry(value: string) {
     setIndustryTags((current) =>
@@ -330,6 +410,165 @@ export function SettingsPageClient({ brand }: SettingsPageClientProps) {
           {/* TODO: Wire to Stripe billing after MVP. */}
           Payment processing coming soon. Plan changes take effect immediately for cycle configuration.
         </p>
+      </Card>
+
+      <Card className="p-6 md:p-8">
+        <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
+          Connected integrations
+        </div>
+        <h3 className="mt-2 font-display text-2xl text-dark">Site integration</h3>
+        <p className="mt-3 max-w-3xl text-sm leading-7 text-mid">
+          Connect GitHub to have SuppGo automatically open a Pull Request with generated content
+          after each cycle. No copy-paste required.
+        </p>
+
+        {githubMessage ? (
+          <p className="mt-4 text-sm text-mid">{githubMessage}</p>
+        ) : null}
+
+        <div className="mt-6 rounded-card border border-sage/15 bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-card border border-sage/20 bg-sage/5 text-sm font-bold text-dark">
+                GH
+              </div>
+              <div>
+                <div className="font-medium text-dark">GitHub</div>
+                <div className="mt-0.5 text-xs text-mid">
+                  {github.connected
+                    ? github.repo_full_name
+                      ? `Connected — ${github.repo_full_name}`
+                      : "Connected — no repository selected"
+                    : "Not connected"}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {github.connected ? (
+                <>
+                  <span className="inline-block rounded-full bg-sage/10 px-2.5 py-1 text-xs font-medium text-sage">
+                    Active
+                  </span>
+                  {confirmDisconnect ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-mid">Disconnect?</span>
+                      <button
+                        type="button"
+                        onClick={handleDisconnectGithub}
+                        disabled={isGithubPending}
+                        className="rounded-card border border-accent/30 px-3 py-1 text-xs font-medium text-accent transition hover:bg-accent/10 disabled:opacity-60"
+                      >
+                        {isGithubPending ? "..." : "Confirm"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDisconnect(false)}
+                        className="rounded-card border border-sage/20 px-3 py-1 text-xs text-mid transition hover:border-sage/40"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDisconnect(true)}
+                      className="rounded-card border border-sage/20 px-3 py-1 text-xs text-mid transition hover:border-sage/40"
+                    >
+                      Disconnect
+                    </button>
+                  )}
+                </>
+              ) : (
+                <a
+                  href="/api/integrations/github/authorize?from=settings"
+                  className="btn-primary px-4 py-2 text-sm"
+                >
+                  Connect GitHub
+                </a>
+              )}
+            </div>
+          </div>
+
+          {github.connected ? (
+            <div className="mt-5 space-y-4 border-t border-sage/10 pt-5">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-dark">Repository</label>
+                <div className="flex gap-2">
+                  {repos.length > 0 ? (
+                    <select
+                      value={githubRepo}
+                      onChange={(e) => setGithubRepo(e.target.value)}
+                      className="flex-1 rounded-card border border-sage/20 bg-white px-4 py-2.5 text-sm text-dark outline-none transition-colors duration-200 focus:border-sage"
+                    >
+                      <option value="">Select a repository…</option>
+                      {repos.map((r) => (
+                        <option key={r.full_name} value={r.full_name}>
+                          {r.full_name}{r.private ? " (private)" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      placeholder="owner/repository"
+                      value={githubRepo}
+                      onChange={(e) => setGithubRepo(e.target.value)}
+                      className="flex-1 rounded-card border border-sage/20 bg-white px-4 py-2.5 text-sm text-dark outline-none transition-colors duration-200 focus:border-sage"
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void loadRepos()}
+                    disabled={loadingRepos}
+                    className="rounded-card border border-sage/20 px-3 py-2.5 text-xs text-mid transition hover:border-sage/40 disabled:opacity-60"
+                  >
+                    {loadingRepos ? "Loading…" : "Browse"}
+                  </button>
+                </div>
+                <p className="text-xs text-mid">The repository SuppGo will open PRs against.</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-dark">Content directory</label>
+                <input
+                  type="text"
+                  placeholder="content/pages"
+                  value={githubDir}
+                  onChange={(e) => setGithubDir(e.target.value)}
+                  className="w-full rounded-card border border-sage/20 bg-white px-4 py-2.5 text-sm text-dark outline-none transition-colors duration-200 focus:border-sage"
+                />
+                <p className="text-xs text-mid">
+                  Relative path in the repo where content files will be committed. Leave blank for
+                  the repo root.
+                </p>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleSaveGithubConfig}
+                  disabled={isGithubPending}
+                  className="btn-primary px-5 py-2.5 disabled:opacity-60"
+                >
+                  {isGithubPending ? "Saving…" : "Save configuration"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="mt-4 rounded-card border border-sage/10 bg-white/60 p-5 opacity-60">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-card border border-sage/20 bg-sage/5 text-sm font-bold text-dark">
+              CMS
+            </div>
+            <div>
+              <div className="font-medium text-dark">Headless CMS</div>
+              <div className="mt-0.5 text-xs text-mid">Webflow, Contentful, Sanity, Shopify — coming soon</div>
+            </div>
+          </div>
+        </div>
       </Card>
     </div>
   );

@@ -122,6 +122,49 @@ export interface ReportRecord {
   created_at: string;
 }
 
+// --- Integrations ---
+
+export type IntegrationType = "github";
+export type IntegrationStatus = "active" | "error" | "disconnected";
+export type ContentDeploymentStatus = "pending" | "deployed" | "failed";
+
+export interface GitHubCredentials {
+  access_token_enc: string; // AES-256-GCM encrypted access token
+  repo_full_name: string | null; // e.g. "owner/my-site"
+  content_dir: string | null; // e.g. "content/pages"
+}
+
+export interface IntegrationRecord {
+  id: string;
+  brand_id: string;
+  integration_type: IntegrationType;
+  credentials: GitHubCredentials;
+  status: IntegrationStatus;
+  last_sync_at: string | null;
+  created_at: string;
+}
+
+// Safe shape sent to client components — no token
+export interface GitHubIntegrationStatus {
+  connected: boolean;
+  repo_full_name: string | null;
+  content_dir: string | null;
+  status: IntegrationStatus;
+}
+
+export interface ContentDeploymentRecord {
+  id: string;
+  content_id: string;
+  brand_id: string;
+  integration_type: IntegrationType;
+  external_url: string | null;
+  status: ContentDeploymentStatus;
+  deployed_at: string | null;
+  created_at: string;
+}
+
+// --- Prompt helpers ---
+
 export interface PromptDefinition {
   promptText: string;
   promptCategory: PromptCategory;

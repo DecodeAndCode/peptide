@@ -1,8 +1,10 @@
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { TriggerCycleButton } from "@/components/dashboard/TriggerCycleButton";
+import { GitHubDeployButton } from "@/components/dashboard/GitHubDeployButton";
 import { VisibilityGraph } from "@/components/dashboard/VisibilityGraph";
 import { getDashboardOverview } from "@/lib/dashboard";
+import { getGitHubIntegrationStatus } from "@/lib/integrations";
 import { formatRoundedValue, formatSignedRoundedValue } from "@/lib/formatting";
 import { getSubscriptionPlan, getTierAnalysisConfig } from "@/lib/suppgo";
 import { isSuppgoTestModeEnabled } from "@/lib/supabase/env";
@@ -22,9 +24,14 @@ export default async function DashboardPage() {
     return null;
   }
 
-  const plan = getSubscriptionPlan(overview.brand.subscription_tier);
-  const tierConfig = getTierAnalysisConfig(overview.brand.subscription_tier);
-  const testModeEnabled = isSuppgoTestModeEnabled();
+  const [plan, tierConfig, testModeEnabled, githubIntegration] = [
+    getSubscriptionPlan(overview.brand.subscription_tier),
+    getTierAnalysisConfig(overview.brand.subscription_tier),
+    isSuppgoTestModeEnabled(),
+    await getGitHubIntegrationStatus(overview.brand.id),
+  ] as const;
+
+  const hasGitHub = githubIntegration.connected && !!githubIntegration.repo_full_name;
 
   return (
     <div className="space-y-6">
@@ -238,14 +245,26 @@ export default async function DashboardPage() {
             </div>
             <h3 className="mt-2 font-display text-2xl text-dark">Cycle-linked drafts ready for review</h3>
           </div>
-          <a href="/reports" className="btn-outline px-5 py-2.5">
-            View reports
-          </a>
+          <div className="flex items-center gap-3">
+            {hasGitHub ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-sage/10 px-3 py-1 text-xs font-medium text-sage">
+                <span className="h-1.5 w-1.5 rounded-full bg-sage" />
+                GitHub connected
+              </span>
+            ) : (
+              <a href="/settings#integrations" className="text-xs text-mid underline-offset-2 hover:underline">
+                Connect GitHub to push content →
+              </a>
+            )}
+            <a href="/reports" className="btn-outline px-5 py-2.5">
+              View reports
+            </a>
+          </div>
         </div>
         <div className="mt-6 grid gap-4 md:grid-cols-3">
           {overview.latestGeneratedContent.length > 0 ? (
             overview.latestGeneratedContent.slice(0, 3).map((item) => (
-              <div key={item.id} className="rounded-card border border-sage/12 bg-white p-5">
+              <div key={item.id} className="flex flex-col rounded-card border border-sage/12 bg-white p-5">
                 <div className="text-xs font-medium uppercase tracking-[1.4px] text-sage">
                   {item.content_type.replaceAll("_", " ")}
                 </div>
@@ -254,6 +273,7 @@ export default async function DashboardPage() {
                   {item.body.slice(0, 180)}
                   {item.body.length > 180 ? "..." : ""}
                 </p>
+                {hasGitHub ? <GitHubDeployButton contentId={item.id} /> : null}
               </div>
             ))
           ) : (
