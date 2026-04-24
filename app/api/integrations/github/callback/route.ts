@@ -62,7 +62,6 @@ export async function GET(request: Request) {
         client_id: clientId,
         client_secret: clientSecret,
         code,
-        redirect_uri: `${appUrl}/api/integrations/github/callback`,
       }),
     });
     tokenData = (await res.json()) as GitHubTokenResponse;

@@ -31,12 +31,8 @@ export async function GET(request: Request) {
     maxAge: 600, // 10 minutes
   });
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  const redirectUri = `${appUrl}/api/integrations/github/callback`;
-
   const params = new URLSearchParams({
     client_id: getGitHubClientId(),
-    redirect_uri: redirectUri,
     scope: "repo",
     state,
   });
