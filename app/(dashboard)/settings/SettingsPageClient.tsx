@@ -2,8 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { Card } from "@/components/ui/Card";
-import { INDUSTRY_OPTIONS } from "@/lib/suppgo";
-import type { BrandRecord } from "@/types";
+import { INDUSTRY_OPTIONS, SUBSCRIPTION_PLANS } from "@/lib/suppgo";
+import type { BrandRecord, SubscriptionTier } from "@/types";
 
 interface SettingsPageClientProps {
   brand: BrandRecord;
@@ -32,6 +32,11 @@ export function SettingsPageClient({ brand }: SettingsPageClientProps) {
   const [competitorUrls, setCompetitorUrls] = useState<string[]>(getInitialCompetitors(brand.competitor_urls));
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const [currentTier, setCurrentTier] = useState<SubscriptionTier>(brand.subscription_tier);
+  const [tierMessage, setTierMessage] = useState<string | null>(null);
+  const [isTierPending, startTierTransition] = useTransition();
+  const [confirmingTier, setConfirmingTier] = useState<SubscriptionTier | null>(null);
 
   function toggleIndustry(value: string) {
     setIndustryTags((current) =>
@@ -65,6 +70,40 @@ export function SettingsPageClient({ brand }: SettingsPageClientProps) {
       }
 
       setMessage("Brand settings saved.");
+    });
+  }
+
+  function handleTierSwitch(tier: SubscriptionTier) {
+    if (tier === currentTier) return;
+    setConfirmingTier(tier);
+  }
+
+  function confirmTierSwitch() {
+    if (!confirmingTier) return;
+
+    setTierMessage(null);
+    const tier = confirmingTier;
+    setConfirmingTier(null);
+
+    startTierTransition(async () => {
+      const response = await fetch("/api/settings/subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscriptionTier: tier }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as {
+        subscriptionTier?: SubscriptionTier;
+        error?: string;
+      } | null;
+
+      if (!response.ok) {
+        setTierMessage(payload?.error ?? "Unable to update plan right now.");
+        return;
+      }
+
+      setCurrentTier(payload?.subscriptionTier ?? tier);
+      setTierMessage("Plan updated. Changes take effect on your next cycle.");
     });
   }
 
@@ -186,28 +225,111 @@ export function SettingsPageClient({ brand }: SettingsPageClientProps) {
 
       <Card className="p-6 md:p-8">
         <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">Billing</div>
-        <h3 className="mt-2 font-display text-2xl text-dark">Subscription placeholder</h3>
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
-          <div className="rounded-card border border-sage/12 bg-white p-4">
-            <div className="text-xs uppercase tracking-[1.4px] text-sage">Current tier</div>
-            <div className="mt-2 text-lg font-medium capitalize text-dark">{brand.subscription_tier}</div>
-          </div>
-          <div className="rounded-card border border-sage/12 bg-white p-4">
-            <div className="text-xs uppercase tracking-[1.4px] text-sage">Status</div>
-            <div className="mt-2 text-lg font-medium capitalize text-dark">{brand.subscription_status}</div>
-          </div>
-          <div className="rounded-card border border-sage/12 bg-white p-4">
-            <div className="text-xs uppercase tracking-[1.4px] text-sage">Trial ends</div>
-            <div className="mt-2 text-lg font-medium text-dark">
-              {brand.trial_ends_at ? new Date(brand.trial_ends_at).toLocaleDateString() : "Not set"}
-            </div>
-          </div>
+        <h3 className="mt-2 font-display text-2xl text-dark">Subscription plan</h3>
+
+        <div className="mt-3 flex flex-wrap gap-6 text-sm text-mid">
+          <span>
+            Status:{" "}
+            <span className="font-medium capitalize text-dark">{brand.subscription_status}</span>
+          </span>
+          {brand.trial_ends_at && (
+            <span>
+              Trial ends:{" "}
+              <span className="font-medium text-dark">
+                {new Date(brand.trial_ends_at).toLocaleDateString()}
+              </span>
+            </span>
+          )}
         </div>
-        <p className="mt-4 text-sm leading-7 text-mid">
-          Billing management is intentionally placeholder-only in MVP so the tier source of truth
-          remains Section 11 and the `brands.subscription_tier` field.
+
+        {tierMessage && (
+          <p className="mt-4 text-sm text-mid">{tierMessage}</p>
+        )}
+
+        <div className="mt-5 grid gap-4 md:grid-cols-3">
+          {SUBSCRIPTION_PLANS.map((plan) => {
+            const isActive = currentTier === plan.tier;
+            const isConfirming = confirmingTier === plan.tier;
+
+            return (
+              <div
+                key={plan.tier}
+                className={`rounded-card border p-5 transition ${
+                  isActive
+                    ? "border-sage bg-sage/5"
+                    : "border-sage/15 bg-white"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="font-display text-lg font-medium text-dark">{plan.name}</div>
+                    <div className="mt-0.5 text-sm text-mid">
+                      {plan.price}
+                      <span className="text-xs text-mid/60"> / mo</span>
+                    </div>
+                  </div>
+                  {isActive && (
+                    <span className="shrink-0 rounded-full bg-sage/10 px-2.5 py-1 text-xs font-medium text-sage">
+                      Current
+                    </span>
+                  )}
+                </div>
+
+                <ul className="mt-4 space-y-1.5">
+                  {plan.features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-2 text-xs text-mid">
+                      <span className="mt-px text-sage">✓</span>
+                      {feature}
+                    </li>
+                  ))}
+                </ul>
+
+                {!isActive && (
+                  <div className="mt-4">
+                    {isConfirming ? (
+                      <div className="space-y-2">
+                        <p className="text-xs text-mid">
+                          Switch to {plan.name}? Takes effect on next cycle.
+                        </p>
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={confirmTierSwitch}
+                            disabled={isTierPending}
+                            className="btn-primary px-3 py-1.5 text-xs disabled:opacity-60"
+                          >
+                            {isTierPending ? "Switching..." : "Confirm"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmingTier(null)}
+                            className="rounded-card border border-sage/20 px-3 py-1.5 text-xs text-mid transition hover:border-sage/40"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleTierSwitch(plan.tier as SubscriptionTier)}
+                        disabled={isTierPending}
+                        className="w-full rounded-card border border-sage/20 py-2 text-xs font-medium text-dark transition hover:border-sage hover:bg-sage/5 disabled:opacity-60"
+                      >
+                        Switch to {plan.name}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <p className="mt-4 text-xs text-mid/70">
+          {/* TODO: Wire to Stripe billing after MVP. */}
+          Payment processing coming soon. Plan changes take effect immediately for cycle configuration.
         </p>
-        {/* TODO: Stripe billing portal and subscription management live here after MVP. */}
       </Card>
     </div>
   );
