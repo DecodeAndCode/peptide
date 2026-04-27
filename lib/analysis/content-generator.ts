@@ -52,6 +52,13 @@ interface PromptOpportunity {
   competitorCount: number;
 }
 
+const PROMPT_REUSE_COOLDOWN_CYCLES = 2;
+
+interface RecentPromptUsage {
+  blockedPromptKeys: Set<string>;
+  lastUsedCycleByPromptKey: Map<string, number>;
+}
+
 function logContentGenerationError(
   stage: string,
   error: unknown,
@@ -129,6 +136,140 @@ function getPromptOpportunities(prompts: PromptRecord[], category?: PromptCatego
 
     return right.missCount - left.missCount;
   });
+}
+
+function normalizePromptKey(value: string) {
+  return canonicalizeIngredientMentions(value).trim().toLowerCase();
+}
+
+function buildNovelPromptVariant(promptText: string, category: PromptCategory) {
+  const trimmed = promptText.trim().replace(/\?$/, "");
+
+  if (category === "product_interaction") {
+    return `${trimmed} for first-time stack users?`;
+  }
+
+  if (category === "problem_solution") {
+    return `${trimmed} right now?`;
+  }
+
+  if (category === "explicit_recommendation") {
+    return `${trimmed} for beginners?`;
+  }
+
+  return `${trimmed} in simple terms?`;
+}
+
+function applyRecentPromptCooldown({
+  opportunities,
+  usage,
+}: {
+  opportunities: PromptOpportunity[];
+  usage: RecentPromptUsage;
+}) {
+  const filtered =
+    usage.blockedPromptKeys.size > 0
+      ? opportunities.filter((opportunity) => !usage.blockedPromptKeys.has(normalizePromptKey(opportunity.promptText)))
+      : opportunities;
+
+  const candidatePool = filtered.length > 0 ? filtered : opportunities;
+  const ranked = [...candidatePool].sort((left, right) => {
+    const leftKey = normalizePromptKey(left.promptText);
+    const rightKey = normalizePromptKey(right.promptText);
+    const leftLastUsed = usage.lastUsedCycleByPromptKey.get(leftKey) ?? 0;
+    const rightLastUsed = usage.lastUsedCycleByPromptKey.get(rightKey) ?? 0;
+
+    if (leftLastUsed !== rightLastUsed) {
+      return leftLastUsed - rightLastUsed; // older (or never used) first
+    }
+
+    if (right.competitorCount !== left.competitorCount) {
+      return right.competitorCount - left.competitorCount;
+    }
+
+    return right.missCount - left.missCount;
+  });
+
+  if (filtered.length === 0 && ranked.length > 0) {
+    // Guarantee at least one fresh suggestion even when all historical prompts are on cooldown.
+    // This prevents cycles from becoming visually repetitive for users.
+    const seed = ranked[0];
+    const candidateVariant = buildNovelPromptVariant(seed.promptText, seed.category);
+    const candidateVariantKey = normalizePromptKey(candidateVariant);
+
+    if (!usage.blockedPromptKeys.has(candidateVariantKey)) {
+      ranked.unshift({
+        promptText: candidateVariant,
+        category: seed.category,
+        missCount: seed.missCount + 1,
+        competitorCount: seed.competitorCount,
+      });
+    }
+  }
+
+  return ranked;
+}
+
+async function getRecentPromptUsage({
+  supabase,
+  brand,
+  cycle,
+}: {
+  supabase: SupabaseClient;
+  brand: BrandRecord;
+  cycle: CycleRecord;
+}): Promise<RecentPromptUsage> {
+  const minCycleNumber = Math.max(1, cycle.cycle_number - PROMPT_REUSE_COOLDOWN_CYCLES);
+  const { data: recentCycles } = await supabase
+    .from("cycles")
+    .select("id,cycle_number")
+    .eq("brand_id", brand.id)
+    .lt("cycle_number", cycle.cycle_number)
+    .gte("cycle_number", minCycleNumber);
+
+  const cycleIds = (recentCycles ?? []).map((item) => item.id as string);
+  const cycleNumberById = new Map(
+    (recentCycles ?? []).map((item) => [item.id as string, Number((item as { cycle_number: number }).cycle_number)]),
+  );
+
+  if (cycleIds.length === 0) {
+    return {
+      blockedPromptKeys: new Set<string>(),
+      lastUsedCycleByPromptKey: new Map<string, number>(),
+    };
+  }
+
+  const { data: recentContent } = await supabase
+    .from("generated_content")
+    .select("target_prompts,cycle_id")
+    .eq("brand_id", brand.id)
+    .in("cycle_id", cycleIds);
+
+  const blockedPromptKeys = new Set<string>();
+  const lastUsedCycleByPromptKey = new Map<string, number>();
+
+  (recentContent ?? []).forEach((row) => {
+    const typedRow = row as { target_prompts?: unknown; cycle_id?: string | null };
+    const cycleNumber = cycleNumberById.get(typedRow.cycle_id ?? "") ?? 0;
+
+    if (!Array.isArray(typedRow.target_prompts)) {
+      return;
+    }
+
+    typedRow.target_prompts.forEach((prompt) => {
+      const key = normalizePromptKey(String(prompt));
+      blockedPromptKeys.add(key);
+      const existing = lastUsedCycleByPromptKey.get(key) ?? 0;
+      if (cycleNumber > existing) {
+        lastUsedCycleByPromptKey.set(key, cycleNumber);
+      }
+    });
+  });
+
+  return {
+    blockedPromptKeys,
+    lastUsedCycleByPromptKey,
+  };
 }
 
 async function researchInteractionPrompt(
@@ -338,7 +479,7 @@ function generateLlmsTxtSnippet(brand: BrandRecord, siteAnalysis: SiteAnalysisRe
       "content_principles: trust-first | evidence-aware | plain-language | non-promotional",
       "note: This content is for informational purposes only and does not constitute medical advice.",
     ].join("\n"),
-    target_prompts: ["llms.txt"],
+    target_prompts: [],
     medical_sources: [],
   };
 }
@@ -359,12 +500,19 @@ export async function generateCycleContent({
   const tierConfig = getTierAnalysisConfig(brand.subscription_tier);
   const supabase = supabaseClient ?? createClient();
   const rowsToInsert: GeneratedContentInsert[] = [generateLlmsTxtSnippet(brand, siteAnalysis)];
+  const recentPromptUsage = await getRecentPromptUsage({ supabase, brand, cycle });
 
-  const topMissedPrompts = getPromptOpportunities(prompts).slice(0, 3);
+  const topMissedPrompts = applyRecentPromptCooldown({
+    opportunities: getPromptOpportunities(prompts),
+    usage: recentPromptUsage,
+  }).slice(0, 3);
   const faqPrompts = topMissedPrompts.length > 0 ? topMissedPrompts : [{ promptText: buildFallbackFaqPrompt(prompts, siteAnalysis) }];
 
   if (tierConfig.productInteractionContent) {
-    const interactionPrompts = getPromptOpportunities(prompts, "product_interaction").slice(0, 5);
+    const interactionPrompts = applyRecentPromptCooldown({
+      opportunities: getPromptOpportunities(prompts, "product_interaction"),
+      usage: recentPromptUsage,
+    }).slice(0, 5);
 
     for (const opportunity of interactionPrompts) {
       rowsToInsert.push(await generateProductInteractionArticle(brand, opportunity.promptText, siteAnalysis));
