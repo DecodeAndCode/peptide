@@ -7,6 +7,8 @@ import {
   recordContentDeployment,
 } from "@/lib/integrations";
 import { createContentPR } from "@/lib/github/pr-creator";
+import { createHtmlContentPR } from "@/lib/github/html-pr-creator";
+import { analyzeRepoForDeployment } from "@/lib/github/repo-analyzer";
 import { enforceSameOrigin } from "@/lib/security";
 import type { GeneratedContentRecord, BrandRecord, CycleRecord } from "@/types";
 
@@ -16,6 +18,8 @@ const deploySchema = z.object({
   repo_full_name: z.string().optional(),
   content_dir: z.string().optional(),
 });
+
+const MIN_REPO_CONFIDENCE = 60;
 
 export async function POST(request: Request) {
   const sameOriginError = enforceSameOrigin(request);
@@ -89,16 +93,49 @@ export async function POST(request: Request) {
   }
 
   const accessToken = getDecryptedAccessToken(integration);
+  const preflight = await analyzeRepoForDeployment({
+    accessToken,
+    repoFullName,
+    configuredContentDir: contentDir,
+    contentType: (content as GeneratedContentRecord).content_type,
+  });
+
+  if (preflight.confidence < MIN_REPO_CONFIDENCE || preflight.strategy === "unknown") {
+    return NextResponse.json(
+      {
+        error:
+          "SuppGo could not confidently determine how to apply this content in the target repository. Update your content directory in Settings or use a repo that has a clear content pipeline.",
+        preflight,
+      },
+      { status: 400 },
+    );
+  }
+
+  const markdownTargetDir =
+    (content as GeneratedContentRecord).content_type === "llms_txt" && preflight.recommendedTargetPath
+      ? preflight.recommendedTargetPath.split("/").slice(0, -1).join("/")
+      : "";
+  const resolvedContentDir = contentDir || markdownTargetDir || preflight.recommendedContentDir || "";
 
   try {
-    const result = await createContentPR({
-      accessToken,
-      repoFullName,
-      contentDir,
-      content: content as GeneratedContentRecord,
-      brand: brand as BrandRecord,
-      cycle,
-    });
+    const result =
+      preflight.strategy === "html_inplace" && preflight.recommendedTargetPath
+        ? await createHtmlContentPR({
+            accessToken,
+            repoFullName,
+            targetPath: preflight.recommendedTargetPath,
+            content: content as GeneratedContentRecord,
+            brand: brand as BrandRecord,
+            cycle,
+          })
+        : await createContentPR({
+            accessToken,
+            repoFullName,
+            contentDir: resolvedContentDir,
+            content: content as GeneratedContentRecord,
+            brand: brand as BrandRecord,
+            cycle,
+          });
 
     await recordContentDeployment({
       contentId: parsed.data.content_id,
@@ -113,6 +150,7 @@ export async function POST(request: Request) {
       pr_url: result.pr_url,
       branch_name: result.branch_name,
       file_path: result.file_path,
+      preflight,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to create GitHub PR.";
