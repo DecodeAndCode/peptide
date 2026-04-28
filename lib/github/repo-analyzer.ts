@@ -235,7 +235,10 @@ function computePreflight({
   }
 
   const topMarkdownDir = markdownDirs[0] ?? null;
-  const recommendedContentDir = configuredDirNormalized || knownDirMatch || topMarkdownDir || null;
+  const recommendedContentDir =
+    configuredDirNormalized ||
+    knownDirMatch ||
+    (topMarkdownDir && topMarkdownDir !== "." ? topMarkdownDir : null);
   let strategy: DeploymentStrategy = "unknown";
   let recommendedTargetPath: string | null = null;
 

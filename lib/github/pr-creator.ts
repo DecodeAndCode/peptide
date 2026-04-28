@@ -34,7 +34,7 @@ export async function createContentPR(options: CreatePROptions): Promise<CreateP
   const branchName = `suppgo/cycle-${cycleNum}-content-${dateSuffix}`;
 
   const { filename, body } = formatContentAsMarkdown(content, brand, cycle);
-  const normalizedDir = contentDir.replace(/\/$/, "").replace(/^\//, "");
+  const normalizedDir = contentDir.trim() === "." ? "" : contentDir.replace(/\/$/, "").replace(/^\//, "");
   const filePath = normalizedDir ? `${normalizedDir}/${filename}` : filename;
 
   // Resolve the default branch and its HEAD sha
