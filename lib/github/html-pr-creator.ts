@@ -17,7 +17,59 @@ export interface CreateHtmlPRResult {
   file_path: string;
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function toCardExcerpt(value: string, maxLength = 220) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function replaceFaqCardInSection(existingHtml: string, content: GeneratedContentRecord) {
+  const sectionStart = existingHtml.search(/FAQ\s*Snippets/i);
+  if (sectionStart < 0) {
+    return null;
+  }
+
+  const sectionWindow = existingHtml.slice(sectionStart, sectionStart + 6000);
+  const cardPattern =
+    /(<(?:div|article)\b[^>]*>\s*<h[1-6]\b[^>]*>)([\s\S]*?)(<\/h[1-6]>\s*<p\b[^>]*>)([\s\S]*?)(<\/p>\s*<\/(?:div|article)>)/i;
+  const match = sectionWindow.match(cardPattern);
+
+  if (!match || typeof match.index !== "number") {
+    return null;
+  }
+
+  const replacement = `${match[1]}${escapeHtml(content.title ?? "FAQ update")}${match[3]}${escapeHtml(
+    toCardExcerpt(content.body),
+  )}${match[5]}`;
+
+  const replacedWindow =
+    sectionWindow.slice(0, match.index) +
+    replacement +
+    sectionWindow.slice(match.index + match[0].length);
+
+  return existingHtml.slice(0, sectionStart) + replacedWindow + existingHtml.slice(sectionStart + sectionWindow.length);
+}
+
 function appendContentBlock(existingHtml: string, content: GeneratedContentRecord, cycleNum: number) {
+  if (content.content_type === "faq_snippet") {
+    const replacedFaqSection = replaceFaqCardInSection(existingHtml, content);
+    if (replacedFaqSection) {
+      return replacedFaqSection;
+    }
+  }
+
   const block = [
     "",
     "<!-- suppgo:start -->",
