@@ -21,7 +21,7 @@
     "node-fetch": "^3.3.2",
     "openai": "^6.31.0",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
+    "react-dom": "^19.2.5",
     "recharts": "^3.8.0",
     "resend": "^6.9.4",
     "server-only": "^0.0.1",
@@ -30,7 +30,7 @@
   "devDependencies": {
     "@types/node": "^25.5.0",
     "@types/react": "^18.3.28",
-    "@types/react-dom": "^18.3.7",
+    "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.27",
     "eslint": "^8.57.1",
     "eslint-config-next": "^14.2.35",
