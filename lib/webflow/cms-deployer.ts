@@ -1,6 +1,5 @@
 import "server-only";
 import {
-  buildWebflowCmsItemUrl,
   buildWebflowDashboardUrl,
   contentToHtml,
   createWebflowDraftItem,
@@ -82,17 +81,18 @@ export async function deployCycleToWebflow(opts: DeployCycleOptions): Promise<Cm
       "Webflow changes are saved as drafts. New draft CMS items may not appear on the published site preview until they are reviewed and published in Webflow.",
     );
 
+    const dashboardUrl = buildWebflowDashboardUrl(site.id);
+    previewLinks.push({
+      label: "Open Webflow dashboard",
+      url: dashboardUrl,
+      type: "webflow_dashboard",
+    });
+
     if (site.previewUrl) {
       previewLinks.push({
         label: "Open published site preview",
         url: site.previewUrl,
         type: "site_preview",
-      });
-    } else {
-      previewLinks.push({
-        label: "Open Webflow dashboard",
-        url: buildWebflowDashboardUrl(site.id),
-        type: "webflow_dashboard",
       });
     }
 
@@ -117,7 +117,7 @@ export async function deployCycleToWebflow(opts: DeployCycleOptions): Promise<Cm
           contentId: item.id,
           brandId: opts.brand.id,
           integrationType: "webflow",
-          externalUrl: buildWebflowDashboardUrl(site.id),
+          externalUrl: dashboardUrl,
           status: "failed",
           deploymentRunId: run.id,
           actionType: "skipped",
@@ -138,13 +138,16 @@ export async function deployCycleToWebflow(opts: DeployCycleOptions): Promise<Cm
           fieldData,
         });
         updatedCount += 1;
-        const itemUrl = buildWebflowCmsItemUrl(site.id, target.collection.id, existing.item.id);
-        previewLinks.push({ label: item.title ?? "Updated CMS draft", url: itemUrl, type: "cms_item" });
+        previewLinks.push({
+          label: buildDraftReviewLabel("Updated", item, target.collection.displayName),
+          url: dashboardUrl,
+          type: "cms_item",
+        });
         await recordContentDeployment({
           contentId: item.id,
           brandId: opts.brand.id,
           integrationType: "webflow",
-          externalUrl: itemUrl,
+          externalUrl: dashboardUrl,
           status: "deployed",
           deploymentRunId: run.id,
           externalId: result.id ?? existing.item.id,
@@ -164,7 +167,7 @@ export async function deployCycleToWebflow(opts: DeployCycleOptions): Promise<Cm
           contentId: item.id,
           brandId: opts.brand.id,
           integrationType: "webflow",
-          externalUrl: buildWebflowDashboardUrl(site.id),
+          externalUrl: dashboardUrl,
           status: "failed",
           deploymentRunId: run.id,
           actionType: "skipped",
@@ -178,13 +181,16 @@ export async function deployCycleToWebflow(opts: DeployCycleOptions): Promise<Cm
           fieldData,
         });
         createdCount += 1;
-        const itemUrl = buildWebflowCmsItemUrl(site.id, target.collection.id, result.id);
-        previewLinks.push({ label: item.title ?? "New CMS draft", url: itemUrl, type: "cms_item" });
+        previewLinks.push({
+          label: buildDraftReviewLabel("Created", item, target.collection.displayName),
+          url: dashboardUrl,
+          type: "cms_item",
+        });
         await recordContentDeployment({
           contentId: item.id,
           brandId: opts.brand.id,
           integrationType: "webflow",
-          externalUrl: itemUrl,
+          externalUrl: dashboardUrl,
           status: "deployed",
           deploymentRunId: run.id,
           externalId: result.id,
@@ -436,6 +442,10 @@ function prettifyContentType(value: string) {
   return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function buildDraftReviewLabel(action: "Created" | "Updated", content: GeneratedContentRecord, collectionName: string) {
+  return `${action}: ${content.title ?? prettifyContentType(content.content_type)} in ${collectionName}`;
+}
+
 function normalizeText(value: string) {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 }
@@ -447,8 +457,9 @@ function slugify(value: string) {
 function dedupeLinks(links: CmsDeploymentPreviewLink[]) {
   const seen = new Set<string>();
   return links.filter((link) => {
-    if (seen.has(link.url)) return false;
-    seen.add(link.url);
+    const key = `${link.type}:${link.label}:${link.url}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
 }

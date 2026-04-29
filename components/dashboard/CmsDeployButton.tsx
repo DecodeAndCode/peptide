@@ -45,7 +45,15 @@ export function CmsDeployButton({ cycleId, connected, siteName }: CmsDeployButto
   }, [state]);
 
   const primaryLink = useMemo(() => {
-    return result?.preview_links.find((link) => link.type === "cms_item") ?? result?.preview_links[0] ?? null;
+    return result?.preview_links.find((link) => link.type === "webflow_dashboard") ?? result?.preview_links[0] ?? null;
+  }, [result]);
+
+  const publishedPreviewLink = useMemo(() => {
+    return result?.preview_links.find((link) => link.type === "site_preview") ?? null;
+  }, [result]);
+
+  const reviewItems = useMemo(() => {
+    return result?.preview_links.filter((link) => link.type === "cms_item") ?? [];
   }, [result]);
 
   async function handleDeploy() {
@@ -94,7 +102,17 @@ export function CmsDeployButton({ cycleId, connected, siteName }: CmsDeployButto
         <div className="mt-3 flex flex-wrap gap-2">
           {primaryLink ? (
             <a href={primaryLink.url} target="_blank" rel="noreferrer" className="btn-primary px-4 py-2 text-xs">
-              Open Webflow draft
+              Open Webflow dashboard
+            </a>
+          ) : null}
+          {publishedPreviewLink ? (
+            <a
+              href={publishedPreviewLink.url}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-card border border-sage/20 px-3 py-2 text-xs text-mid transition hover:border-sage/40"
+            >
+              Open published site preview
             </a>
           ) : null}
           <button
@@ -105,6 +123,16 @@ export function CmsDeployButton({ cycleId, connected, siteName }: CmsDeployButto
             Apply again
           </button>
         </div>
+        {reviewItems.length > 0 ? (
+          <div className="mt-3 rounded-card border border-sage/10 bg-white/70 p-3">
+            <p className="text-xs font-medium text-dark">Drafts to review in Webflow</p>
+            <ul className="mt-2 space-y-1 text-xs leading-5 text-mid">
+              {reviewItems.slice(0, 5).map((link) => (
+                <li key={`${link.label}-${link.url}`}>{link.label}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
         {result.warnings.length > 0 ? (
           <div className="mt-3 space-y-1 text-xs leading-5 text-mid">
             {result.warnings.slice(0, 3).map((warning) => (

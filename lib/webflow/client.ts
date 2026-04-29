@@ -147,10 +147,6 @@ export function buildWebflowDashboardUrl(siteId: string) {
   return `https://webflow.com/dashboard/sites/${siteId}`;
 }
 
-export function buildWebflowCmsItemUrl(siteId: string, collectionId: string, itemId: string) {
-  return `${buildWebflowDashboardUrl(siteId)}/cms/${collectionId}/${itemId}`;
-}
-
 export function contentToHtml(content: GeneratedContentRecord) {
   return content.body
     .split(/\n{2,}/)
