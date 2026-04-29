@@ -45,7 +45,7 @@ export function CmsDeployButton({ cycleId, connected, siteName }: CmsDeployButto
   }, [state]);
 
   const primaryLink = useMemo(() => {
-    return result?.preview_links.find((link) => link.type === "site_preview") ?? result?.preview_links[0] ?? null;
+    return result?.preview_links.find((link) => link.type === "cms_item") ?? result?.preview_links[0] ?? null;
   }, [result]);
 
   async function handleDeploy() {
@@ -94,7 +94,7 @@ export function CmsDeployButton({ cycleId, connected, siteName }: CmsDeployButto
         <div className="mt-3 flex flex-wrap gap-2">
           {primaryLink ? (
             <a href={primaryLink.url} target="_blank" rel="noreferrer" className="btn-primary px-4 py-2 text-xs">
-              Open preview
+              Open Webflow draft
             </a>
           ) : null}
           <button

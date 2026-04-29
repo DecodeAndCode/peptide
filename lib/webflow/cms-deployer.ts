@@ -78,8 +78,16 @@ export async function deployCycleToWebflow(opts: DeployCycleOptions): Promise<Cm
       savedSiteId: integration.credentials.site_id ?? null,
     });
 
+    warnings.push(
+      "Webflow changes are saved as drafts. New draft CMS items may not appear on the published site preview until they are reviewed and published in Webflow.",
+    );
+
     if (site.previewUrl) {
-      previewLinks.push({ label: "Open Webflow site preview", url: site.previewUrl, type: "site_preview" });
+      previewLinks.push({
+        label: "Open published site preview",
+        url: site.previewUrl,
+        type: "site_preview",
+      });
     } else {
       previewLinks.push({
         label: "Open Webflow dashboard",

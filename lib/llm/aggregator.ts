@@ -31,6 +31,34 @@ async function runModelQuery(model: PromptModel, promptText: string) {
   }
 }
 
+function buildProviderFailureResult({
+  promptText,
+  promptCategory,
+  model,
+  error,
+}: {
+  promptText: string;
+  promptCategory: PromptCategory;
+  model: PromptModel;
+  error: unknown;
+}): PromptAnalysisResult {
+  const message = error instanceof Error ? error.message : "The model provider did not return a response.";
+
+  return {
+    promptText,
+    promptCategory,
+    model,
+    rawResponse: `Provider unavailable: ${message}`,
+    citationUrls: [],
+    brandMentioned: false,
+    mentionRank: null,
+    mentionContext: null,
+    competitorsMentioned: [],
+    sentiment: "model_refused",
+    visibilityScore: 0,
+  };
+}
+
 export async function runPromptAcrossModels({
   brand,
   siteAnalysis,
@@ -46,20 +74,29 @@ export async function runPromptAcrossModels({
   models: PromptModel[];
   includeCompetitors: boolean;
 }): Promise<PromptAnalysisResult[]> {
-  const rawResponses = await Promise.all(models.map((model) => runModelQuery(model, promptText)));
-
   return Promise.all(
-    rawResponses.map((response) =>
-      scoreBrandMention({
-        brand,
-        siteAnalysis,
-        promptText,
-        promptCategory,
-        model: response.model,
-        rawResponse: response.text,
-        citationUrls: response.citationUrls,
-        includeCompetitors,
-      }),
-    ),
+    models.map(async (model) => {
+      try {
+        const response = await runModelQuery(model, promptText);
+
+        return scoreBrandMention({
+          brand,
+          siteAnalysis,
+          promptText,
+          promptCategory,
+          model: response.model,
+          rawResponse: response.text,
+          citationUrls: response.citationUrls,
+          includeCompetitors,
+        });
+      } catch (error) {
+        return buildProviderFailureResult({
+          promptText,
+          promptCategory,
+          model,
+          error,
+        });
+      }
+    }),
   );
 }
