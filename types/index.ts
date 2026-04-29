@@ -124,9 +124,11 @@ export interface ReportRecord {
 
 // --- Integrations ---
 
-export type IntegrationType = "github";
+export type IntegrationType = "github" | "webflow";
 export type IntegrationStatus = "active" | "error" | "disconnected";
 export type ContentDeploymentStatus = "pending" | "deployed" | "failed";
+export type CmsDeploymentRunStatus = "pending" | "running" | "completed" | "partial_success" | "failed";
+export type CmsDeploymentActionType = "create_draft" | "update_draft" | "skipped";
 
 export interface GitHubCredentials {
   access_token_enc: string; // AES-256-GCM encrypted access token
@@ -134,11 +136,38 @@ export interface GitHubCredentials {
   content_dir: string | null; // e.g. "content/pages"
 }
 
+export interface WebflowSiteSummary {
+  id: string;
+  displayName: string;
+  shortName: string | null;
+  previewUrl: string | null;
+}
+
+export interface WebflowCredentials {
+  access_token_enc: string;
+  refresh_token_enc: string | null;
+  token_expires_at: string | null;
+  site_id: string | null;
+  site_name: string | null;
+  preview_url: string | null;
+}
+
+export interface IntegrationCredentials {
+  access_token_enc: string;
+  repo_full_name?: string | null;
+  content_dir?: string | null;
+  refresh_token_enc?: string | null;
+  token_expires_at?: string | null;
+  site_id?: string | null;
+  site_name?: string | null;
+  preview_url?: string | null;
+}
+
 export interface IntegrationRecord {
   id: string;
   brand_id: string;
   integration_type: IntegrationType;
-  credentials: GitHubCredentials;
+  credentials: IntegrationCredentials;
   status: IntegrationStatus;
   last_sync_at: string | null;
   created_at: string;
@@ -152,6 +181,37 @@ export interface GitHubIntegrationStatus {
   status: IntegrationStatus;
 }
 
+export interface WebflowIntegrationStatus {
+  connected: boolean;
+  site_id: string | null;
+  site_name: string | null;
+  preview_url: string | null;
+  status: IntegrationStatus;
+}
+
+export interface CmsDeploymentPreviewLink {
+  label: string;
+  url: string;
+  type: "site_preview" | "cms_item" | "webflow_dashboard";
+}
+
+export interface CmsDeploymentRunRecord {
+  id: string;
+  cycle_id: string;
+  brand_id: string;
+  integration_type: IntegrationType;
+  status: CmsDeploymentRunStatus;
+  created_count: number;
+  updated_count: number;
+  skipped_count: number;
+  preview_links: CmsDeploymentPreviewLink[];
+  warnings: string[];
+  error_message: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+}
+
 export interface ContentDeploymentRecord {
   id: string;
   content_id: string;
@@ -161,6 +221,11 @@ export interface ContentDeploymentRecord {
   status: ContentDeploymentStatus;
   deployed_at: string | null;
   created_at: string;
+  deployment_run_id?: string | null;
+  external_id?: string | null;
+  action_type?: CmsDeploymentActionType | null;
+  metadata?: Record<string, unknown>;
+  error_message?: string | null;
 }
 
 // --- Prompt helpers ---

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { CategoryPerformanceChart } from "@/components/dashboard/CategoryPerformanceChart";
+import { CmsDeployButton } from "@/components/dashboard/CmsDeployButton";
 import { CopyButton } from "@/components/dashboard/CopyButton";
 import { PromptResultsTable } from "@/components/dashboard/PromptResultsTable";
 import { ReportActionButtons } from "@/components/dashboard/ReportActionButtons";
@@ -7,6 +8,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { getCycleReportData } from "@/lib/dashboard";
 import { formatRoundedValue, formatSignedRoundedValue } from "@/lib/formatting";
+import { getWebflowIntegrationStatus } from "@/lib/integrations";
 import { getTierAnalysisConfig } from "@/lib/suppgo";
 
 function formatDelta(value: number | null) {
@@ -30,6 +32,7 @@ export default async function CycleReportPage({
 
   const siteSignals = report.latestSiteAnalysis?.content_signals;
   const tierConfig = getTierAnalysisConfig(report.brand.subscription_tier);
+  const webflowIntegration = await getWebflowIntegrationStatus(report.brand.id);
 
   return (
     <div className="space-y-6">
@@ -168,7 +171,20 @@ export default async function CycleReportPage({
         <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
           5. Generated content recommendations
         </div>
-        <h3 className="mt-2 font-display text-2xl text-dark">Ready-to-use drafts from this cycle</h3>
+        <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h3 className="font-display text-2xl text-dark">Ready-to-use drafts from this cycle</h3>
+            <p className="mt-3 max-w-3xl text-sm leading-7 text-mid">
+              Apply every safe content recommendation to Webflow as draft CMS changes, then review the preview before
+              publishing.
+            </p>
+          </div>
+          <CmsDeployButton
+            cycleId={report.cycle.id}
+            connected={webflowIntegration.connected}
+            siteName={webflowIntegration.site_name}
+          />
+        </div>
         <div className="mt-6 space-y-4">
           {report.generatedContent.length > 0 ? (
             report.generatedContent.map((item) => (

@@ -2,9 +2,10 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { TriggerCycleButton } from "@/components/dashboard/TriggerCycleButton";
 import { GitHubDeployButton } from "@/components/dashboard/GitHubDeployButton";
+import { CmsDeployButton } from "@/components/dashboard/CmsDeployButton";
 import { VisibilityGraph } from "@/components/dashboard/VisibilityGraph";
 import { getDashboardOverview } from "@/lib/dashboard";
-import { getGitHubIntegrationStatus } from "@/lib/integrations";
+import { getGitHubIntegrationStatus, getWebflowIntegrationStatus } from "@/lib/integrations";
 import { formatRoundedValue, formatSignedRoundedValue } from "@/lib/formatting";
 import { getSubscriptionPlan, getTierAnalysisConfig } from "@/lib/suppgo";
 import { isSuppgoTestModeEnabled } from "@/lib/supabase/env";
@@ -24,14 +25,16 @@ export default async function DashboardPage() {
     return null;
   }
 
-  const [plan, tierConfig, testModeEnabled, githubIntegration] = [
+  const [plan, tierConfig, testModeEnabled, githubIntegration, webflowIntegration] = [
     getSubscriptionPlan(overview.brand.subscription_tier),
     getTierAnalysisConfig(overview.brand.subscription_tier),
     isSuppgoTestModeEnabled(),
     await getGitHubIntegrationStatus(overview.brand.id),
+    await getWebflowIntegrationStatus(overview.brand.id),
   ] as const;
 
   const hasGitHub = githubIntegration.connected && !!githubIntegration.repo_full_name;
+  const hasWebflow = webflowIntegration.connected;
 
   return (
     <div className="space-y-6">
@@ -245,21 +248,41 @@ export default async function DashboardPage() {
             </div>
             <h3 className="mt-2 font-display text-2xl text-dark">Cycle-linked drafts ready for review</h3>
           </div>
-          <div className="flex items-center gap-3">
-            {hasGitHub ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-sage/10 px-3 py-1 text-xs font-medium text-sage">
-                <span className="h-1.5 w-1.5 rounded-full bg-sage" />
-                GitHub connected
-              </span>
-            ) : (
-              <a href="/settings#integrations" className="text-xs text-mid underline-offset-2 hover:underline">
-                Connect GitHub to push content →
-              </a>
-            )}
+          <div className="flex flex-wrap items-center gap-3">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
+                hasGitHub ? "bg-sage/10 text-sage" : "bg-sage/5 text-mid"
+              }`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${hasGitHub ? "bg-sage" : "bg-mid/40"}`} />
+              {hasGitHub ? "GitHub connected" : "GitHub not connected"}
+            </span>
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
+                hasWebflow ? "bg-sage/10 text-sage" : "bg-sage/5 text-mid"
+              }`}
+            >
+              <span className={`h-1.5 w-1.5 rounded-full ${hasWebflow ? "bg-sage" : "bg-mid/40"}`} />
+              {hasWebflow ? "Webflow connected" : "Webflow not connected"}
+            </span>
             <a href="/reports" className="btn-outline px-5 py-2.5">
               View reports
             </a>
           </div>
+        </div>
+        <div className="mt-5 flex flex-wrap items-center gap-3 rounded-card border border-sage/12 bg-sage/5 p-4">
+          {overview.latestCompletedCycle ? (
+            <CmsDeployButton
+              cycleId={overview.latestCompletedCycle.id}
+              connected={hasWebflow}
+              siteName={webflowIntegration.site_name}
+            />
+          ) : null}
+          {!hasGitHub ? (
+            <a href="/settings#integrations" className="text-xs text-mid underline-offset-2 hover:underline">
+              Connect GitHub for repo-based pushes
+            </a>
+          ) : null}
         </div>
         <div className="mt-6 grid gap-4 md:grid-cols-3">
           {overview.latestGeneratedContent.length > 0 ? (
