@@ -1,0 +1,4 @@
+# CODEOWNERS requests review from repository maintainers for all changes.
+# Replace this owner with a specific SuppGO team, such as @SuppGO/maintainers,
+# after that team exists in the GitHub organization.
+* @DecodeAndCode
