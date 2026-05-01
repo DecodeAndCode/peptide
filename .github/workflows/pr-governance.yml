@@ -1,0 +1,45 @@
+name: PR governance
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - ready_for_review
+      - reopened
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  assign-author:
+    name: Assign PR author
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.type != 'Bot'
+    steps:
+      - name: Assign author as contributor owner
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pr = context.payload.pull_request;
+            const assignee = pr.user.login;
+
+            try {
+              await github.rest.issues.addAssignees({
+                owner,
+                repo,
+                issue_number: pr.number,
+                assignees: [assignee],
+              });
+              core.info(`Assigned PR #${pr.number} to ${assignee}.`);
+            } catch (error) {
+              core.warning(`Could not assign ${assignee}: ${error.message}`);
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: pr.number,
+                body: `@${assignee} is the contributor owner for this PR. GitHub could not add the assignee automatically, so a maintainer should assign or confirm ownership manually.`,
+              });
+            }
