@@ -504,7 +504,8 @@ function getExecutiveSummary(
   };
 }
 
-async function getCurrentBrandContext() {
+async function getCurrentBrandContext(options?: { includeHistoricalMetrics?: boolean }) {
+  const includeHistoricalMetrics = options?.includeHistoricalMetrics ?? true;
   const supabase = createClient();
   const {
     data: { user },
@@ -560,27 +561,33 @@ async function getCurrentBrandContext() {
   const completedCycles = cycles ?? [];
   const latestCompletedCycle = completedCycles.at(-1) ?? null;
   const previousCompletedCycle = completedCycles.length > 1 ? completedCycles.at(-2) ?? null : null;
-  const completedCycleIds = completedCycles.map((cycle) => cycle.id);
+  let prompts: PromptRecord[] = [];
+  let generatedContent: GeneratedContentRecord[] = [];
 
-  const [{ data: prompts }, { data: generatedContent }] = await Promise.all([
-    completedCycleIds.length > 0
-      ? supabase
-          .from("prompts")
-          .select("*")
-          .in("cycle_id", completedCycleIds)
-          .order("created_at", { ascending: true })
-          .returns<PromptRecord[]>()
-      : Promise.resolve({ data: [] as PromptRecord[] }),
-    latestCompletedCycle
-      ? supabase
-          .from("generated_content")
-          .select("*")
-          .eq("brand_id", brand.id)
-          .eq("cycle_id", latestCompletedCycle.id)
-          .order("created_at", { ascending: true })
-          .returns<GeneratedContentRecord[]>()
-      : Promise.resolve({ data: [] as GeneratedContentRecord[] }),
-  ]);
+  if (includeHistoricalMetrics) {
+    const completedCycleIds = completedCycles.map((cycle) => cycle.id);
+    const [{ data: promptData }, { data: generatedContentData }] = await Promise.all([
+      completedCycleIds.length > 0
+        ? supabase
+            .from("prompts")
+            .select("*")
+            .in("cycle_id", completedCycleIds)
+            .order("created_at", { ascending: true })
+            .returns<PromptRecord[]>()
+        : Promise.resolve({ data: [] as PromptRecord[] }),
+      latestCompletedCycle
+        ? supabase
+            .from("generated_content")
+            .select("*")
+            .eq("brand_id", brand.id)
+            .eq("cycle_id", latestCompletedCycle.id)
+            .order("created_at", { ascending: true })
+            .returns<GeneratedContentRecord[]>()
+        : Promise.resolve({ data: [] as GeneratedContentRecord[] }),
+    ]);
+    prompts = promptData ?? [];
+    generatedContent = generatedContentData ?? [];
+  }
 
   return {
     brand,
@@ -589,8 +596,8 @@ async function getCurrentBrandContext() {
     completedCycles,
     latestCompletedCycle,
     previousCompletedCycle,
-    prompts: prompts ?? [],
-    generatedContent: generatedContent ?? [],
+    prompts,
+    generatedContent,
     reports: reports ?? [],
   };
 }
@@ -642,7 +649,7 @@ export const getDashboardOverview = cache(async (): Promise<DashboardOverviewDat
 });
 
 export const getReportsList = cache(async (): Promise<ReportListItem[] | null> => {
-  const context = await getCurrentBrandContext();
+  const context = await getCurrentBrandContext({ includeHistoricalMetrics: false });
 
   if (!context) {
     return null;
@@ -669,7 +676,7 @@ export const getReportsList = cache(async (): Promise<ReportListItem[] | null> =
 });
 
 export const getCycleReportData = cache(async (cycleId: string): Promise<CycleReportData | null> => {
-  const context = await getCurrentBrandContext();
+  const context = await getCurrentBrandContext({ includeHistoricalMetrics: false });
 
   if (!context) {
     return null;
