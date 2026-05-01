@@ -257,7 +257,7 @@ export default async function DashboardPage() {
               </a>
             )}
             <a href="/reports" className="btn-outline px-5 py-2.5">
-              View reports
+              View reports for all generated content
             </a>
           </div>
         </div>

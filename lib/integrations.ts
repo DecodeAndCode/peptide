@@ -9,6 +9,11 @@ import type {
   ContentDeploymentStatus,
 } from "@/types";
 
+export interface PublishTargetStatus {
+  target: "github" | "cms" | "none";
+  connected: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // GitHub integration helpers
 // ---------------------------------------------------------------------------
@@ -36,6 +41,30 @@ export async function getGitHubIntegrationStatus(brandId: string): Promise<GitHu
     content_dir: record.credentials.content_dir,
     status: record.status,
   };
+}
+
+// Returns the active publishing target for generated content actions.
+export async function getPublishTargetStatus(brandId: string): Promise<PublishTargetStatus> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("integrations")
+    .select("integration_type, status")
+    .eq("brand_id", brandId);
+
+  const rows = (data ?? []) as Array<{ integration_type: string; status: string }>;
+  const activeTypes = new Set(
+    rows.filter((row) => row.status === "active").map((row) => row.integration_type.toLowerCase()),
+  );
+
+  if (activeTypes.has("cms")) {
+    return { target: "cms", connected: true };
+  }
+
+  if (activeTypes.has("github")) {
+    return { target: "github", connected: true };
+  }
+
+  return { target: "none", connected: false };
 }
 
 // Decrypts the access token from a stored record.

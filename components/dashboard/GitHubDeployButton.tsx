@@ -4,6 +4,7 @@ import { useState } from "react";
 
 interface GitHubDeployButtonProps {
   contentId: string;
+  className?: string;
 }
 
 interface DeployResult {
@@ -11,7 +12,7 @@ interface DeployResult {
   branch_name: string;
 }
 
-export function GitHubDeployButton({ contentId }: GitHubDeployButtonProps) {
+export function GitHubDeployButton({ contentId, className = "mt-3" }: GitHubDeployButtonProps) {
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [prUrl, setPrUrl] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -44,7 +45,7 @@ export function GitHubDeployButton({ contentId }: GitHubDeployButtonProps) {
         href={prUrl}
         target="_blank"
         rel="noopener noreferrer"
-        className="mt-3 inline-flex items-center gap-1.5 text-xs font-medium text-sage underline-offset-2 hover:underline"
+        className={`${className} inline-flex items-center gap-1.5 text-xs font-medium text-sage underline-offset-2 hover:underline`}
       >
         <span>PR open on GitHub</span>
         <span>↗</span>
@@ -54,7 +55,7 @@ export function GitHubDeployButton({ contentId }: GitHubDeployButtonProps) {
 
   if (state === "error") {
     return (
-      <div className="mt-3 space-y-1">
+      <div className={`${className} space-y-1`}>
         <p className="text-xs text-accent">{errorMessage}</p>
         <button
           type="button"
@@ -72,7 +73,7 @@ export function GitHubDeployButton({ contentId }: GitHubDeployButtonProps) {
       type="button"
       onClick={() => void handleDeploy()}
       disabled={state === "loading"}
-      className="mt-3 inline-flex items-center gap-1.5 rounded-pill border border-sage/20 px-3 py-1.5 text-xs font-medium text-dark transition hover:border-sage hover:bg-sage/5 disabled:cursor-not-allowed disabled:opacity-60"
+      className={`${className} inline-flex items-center gap-1.5 rounded-pill border border-sage/20 px-3 py-1.5 text-xs font-medium text-dark transition hover:border-sage hover:bg-sage/5 disabled:cursor-not-allowed disabled:opacity-60`}
     >
       {state === "loading" ? (
         <>
