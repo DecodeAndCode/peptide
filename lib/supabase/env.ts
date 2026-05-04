@@ -86,3 +86,19 @@ export function getSuppgoTestModePromptExecutionCap() {
 
   return 10;
 }
+
+export function shouldForceSuppgoTestModeCategoryCoverage() {
+  const explicitValue = process.env.SUPPGO_TEST_MODE_FORCE_CATEGORY_COVERAGE;
+
+  if (explicitValue === "true") {
+    return true;
+  }
+
+  if (explicitValue === "false") {
+    return false;
+  }
+
+  // Default on: keeps all prompt categories represented in TEST_MODE
+  // unless explicitly disabled via env var.
+  return true;
+}
