@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { getAppUrl } from "@/lib/supabase/env";
-import type { SubscriptionTier } from "@/types";
 
 const emailSchema = z.object({
   email: z.email(),
@@ -90,7 +89,6 @@ export async function signupAction(formData: FormData) {
     redirect(buildRedirect("/signup", { error: parsed.error.issues[0]?.message }));
   }
 
-  const plan = parsed.data.plan as SubscriptionTier | undefined;
   const supabase = createClient();
   const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
@@ -112,7 +110,7 @@ export async function signupAction(formData: FormData) {
     );
   }
 
-  redirect(buildRedirect("/onboarding", { plan }));
+  redirect("/onboarding");
 }
 
 export async function signOutAction() {

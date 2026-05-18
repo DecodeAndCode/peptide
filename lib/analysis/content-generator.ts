@@ -319,7 +319,7 @@ function buildFallbackProductInteractionBody(
   const sourceLine =
     sources.length > 0
       ? `Supporting sources to review include ${sources.slice(0, 2).join(" and ")}.`
-      : "For Growth-tier drafts, add external medical citations during review before publishing.";
+      : "Add external medical citations during review before publishing.";
 
   return [
     `Direct answer: ${promptText.replace(/\?$/, "")} depends on the ingredients involved, but most combinations should be explained in plain language with clear safety framing and dosage context.`,
@@ -502,18 +502,27 @@ export async function generateCycleContent({
   const rowsToInsert: GeneratedContentInsert[] = [generateLlmsTxtSnippet(brand, siteAnalysis)];
   const recentPromptUsage = await getRecentPromptUsage({ supabase, brand, cycle });
 
+  const interactionOpportunities = applyRecentPromptCooldown({
+    opportunities: getPromptOpportunities(prompts, "product_interaction"),
+    usage: recentPromptUsage,
+  });
+  const interactionPrompts = interactionOpportunities.slice(0, 5);
+  const interactionKeys = new Set(interactionPrompts.map((o) => normalizePromptKey(o.promptText)));
+
+  const faqSourceOpportunities = getPromptOpportunities(prompts).filter(
+    (o) => !interactionKeys.has(normalizePromptKey(o.promptText)),
+  );
+
   const topMissedPrompts = applyRecentPromptCooldown({
-    opportunities: getPromptOpportunities(prompts),
+    opportunities: faqSourceOpportunities,
     usage: recentPromptUsage,
   }).slice(0, 3);
-  const faqPrompts = topMissedPrompts.length > 0 ? topMissedPrompts : [{ promptText: buildFallbackFaqPrompt(prompts, siteAnalysis) }];
+  const faqPrompts =
+    topMissedPrompts.length > 0
+      ? topMissedPrompts
+      : [{ promptText: buildFallbackFaqPrompt(prompts, siteAnalysis) }];
 
   if (tierConfig.productInteractionContent) {
-    const interactionPrompts = applyRecentPromptCooldown({
-      opportunities: getPromptOpportunities(prompts, "product_interaction"),
-      usage: recentPromptUsage,
-    }).slice(0, 5);
-
     for (const opportunity of interactionPrompts) {
       rowsToInsert.push(await generateProductInteractionArticle(brand, opportunity.promptText, siteAnalysis));
     }

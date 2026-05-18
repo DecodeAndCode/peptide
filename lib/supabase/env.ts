@@ -1,3 +1,5 @@
+import { PERPLEXITY_API_MODEL_DEFAULT } from "@/lib/llm/shared";
+
 function getEnv(name: string) {
   const value = process.env[name];
 
@@ -34,6 +36,45 @@ export function getAnthropicApiKey() {
 
 export function getPerplexityApiKey() {
   return getEnv("PERPLEXITY_API_KEY");
+}
+
+export function isPerplexityConfigured() {
+  return Boolean(process.env.PERPLEXITY_API_KEY?.trim());
+}
+
+export function getPerplexityApiModel() {
+  const value = process.env.PERPLEXITY_API_MODEL?.trim();
+  return value && value.length > 0 ? value : PERPLEXITY_API_MODEL_DEFAULT;
+}
+
+export function shouldSkipPerplexityInAnalysisCycle() {
+  if (process.env.NODE_ENV === "production") {
+    return false;
+  }
+
+  return process.env.SUPPGO_CYCLE_SKIP_PERPLEXITY === "true";
+}
+
+/**
+ * Default: Perplexity web-grounded influencer discovery (no SocialFetch).
+ * Opt into the legacy OpenAI + SocialFetch path with
+ * SUPPGO_INFLUENCER_USE_SOCIALFETCH_DISCOVERY=true.
+ * Older installs may set SUPPGO_INFLUENCER_USE_PERPLEXITY=false for the same effect.
+ */
+export function shouldUsePerplexityForInfluencerDiscovery() {
+  if (process.env.SUPPGO_INFLUENCER_USE_PERPLEXITY === "false") {
+    return false;
+  }
+
+  if (process.env.SUPPGO_INFLUENCER_USE_SOCIALFETCH_DISCOVERY === "true") {
+    return false;
+  }
+
+  return true;
+}
+
+export function getInfluencerDiscoveryBackend(): "perplexity" | "socialfetch" {
+  return shouldUsePerplexityForInfluencerDiscovery() ? "perplexity" : "socialfetch";
 }
 
 export function getResendApiKey() {
@@ -101,4 +142,39 @@ export function shouldForceSuppgoTestModeCategoryCoverage() {
   // Default on: keeps all prompt categories represented in TEST_MODE
   // unless explicitly disabled via env var.
   return true;
+}
+
+export function getInfluencerProviderMode() {
+  const value = process.env.INFLUENCER_PROVIDER_MODE;
+
+  if (value === "current_only" || value === "hybrid_socialfetch" || value === "socialfetch_primary") {
+    return value;
+  }
+
+  return "current_only";
+}
+
+export function getSocialFetchApiKey() {
+  return process.env.SOCIALFETCH_API_KEY?.trim() ?? "";
+}
+
+export function isSocialFetchConfigured() {
+  return getSocialFetchApiKey().length > 0;
+}
+
+export function getInfluencerDiscoveryMaxSocialFetchLookups() {
+  return parsePositiveInteger(process.env.SUPPGO_INFLUENCER_SF_MAX_LOOKUPS) ?? 24;
+}
+
+export function getInfluencerDiscoveryStopAfterVerified() {
+  return parsePositiveInteger(process.env.SUPPGO_INFLUENCER_SF_STOP_AFTER_VERIFIED) ?? 8;
+}
+
+export function shouldUseStaticInfluencerHandlePool() {
+  return process.env.SUPPGO_INFLUENCER_USE_STATIC_HANDLE_POOL === "true";
+}
+
+/** When using Perplexity discovery, optionally re-check each handle + follower floor via SocialFetch (uses API credits). */
+export function shouldVerifyPerplexityCandidatesWithSocialFetch() {
+  return isSocialFetchConfigured() && process.env.SUPPGO_INFLUENCER_VERIFY_WITH_SOCIALFETCH === "true";
 }

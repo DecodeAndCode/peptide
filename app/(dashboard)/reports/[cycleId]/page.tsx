@@ -6,10 +6,11 @@ import { PromptResultsTable } from "@/components/dashboard/PromptResultsTable";
 import { ReportActionButtons } from "@/components/dashboard/ReportActionButtons";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { getCycleReportData } from "@/lib/dashboard";
 import { formatRoundedValue, formatSignedRoundedValue } from "@/lib/formatting";
 import { getPublishTargetStatus } from "@/lib/integrations";
-import { getTierAnalysisConfig } from "@/lib/suppgo";
+import { getGeneratedContentDisplay } from "@/lib/suppgo";
 
 function formatDelta(value: number | null) {
   if (value === null) {
@@ -31,7 +32,6 @@ export default async function CycleReportPage({
   }
 
   const siteSignals = report.latestSiteAnalysis?.content_signals;
-  const tierConfig = getTierAnalysisConfig(report.brand.subscription_tier);
   const publishTarget = await getPublishTargetStatus(report.brand.id);
   const detectedSignals = Array.from(
     new Set([...(siteSignals?.productNames ?? []), ...(siteSignals?.ingredients ?? [])].map((item) => item.trim())),
@@ -70,21 +70,38 @@ export default async function CycleReportPage({
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">1. Generated content</div>
-            <h3 className="mt-2 font-display text-2xl text-dark">Cycle-linked drafts ready to publish</h3>
+            <div className="mt-2 flex min-w-0 flex-nowrap items-start gap-1.5">
+              <h3 className="min-w-0 font-display text-2xl text-dark leading-snug">
+                Cycle-linked drafts ready to publish
+              </h3>
+              <InfoHint triggerLabel="What this section contains">
+                Drafts from this cycle only: stack &amp; combination guides (missed “can I take this with that?”
+                prompts), FAQ snippets (other missed prompts), and a brand context file when generated—each
+                labeled by type so you know what gap it targets.
+              </InfoHint>
+            </div>
           </div>
         </div>
         <div className="mt-6">
           {report.generatedContent.length > 0 ? (
             <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-2">
-              {report.generatedContent.map((item) => (
+              {report.generatedContent.map((item) => {
+                const draft = getGeneratedContentDisplay(item.content_type);
+                return (
                 <div
                   key={item.id}
                   className="flex h-[460px] min-w-[320px] max-w-[360px] shrink-0 snap-start flex-col rounded-card border border-sage/12 bg-white p-5"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <div className="text-xs uppercase tracking-[1.4px] text-sage">
-                        {item.content_type.replaceAll("_", " ")}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 flex-nowrap items-center gap-0.5">
+                        <span
+                          className="min-w-0 truncate text-xs uppercase tracking-[1.4px] text-sage"
+                          title={draft.label}
+                        >
+                          {draft.label}
+                        </span>
+                        <InfoHint triggerLabel={`What “${draft.label}” means`}>{draft.rationale}</InfoHint>
                       </div>
                       <h4 className="mt-2 text-lg font-medium text-dark">{item.title ?? "Untitled draft"}</h4>
                     </div>
@@ -117,13 +134,12 @@ export default async function CycleReportPage({
                     ) : null}
                   </div>
                 </div>
-              ))}
+              );
+              })}
             </div>
           ) : (
             <div className="rounded-card border border-sage/12 bg-white p-5 text-sm leading-7 text-mid">
-              {tierConfig.productInteractionContent
-                ? "No generated content was stored for this cycle."
-                : "No FAQ snippet or llms.txt draft was stored for this cycle."}
+              No generated content was stored for this cycle.
             </div>
           )}
         </div>
@@ -164,11 +180,21 @@ export default async function CycleReportPage({
           </div>
           <div className="mt-5 space-y-4">
             <div className="rounded-card border border-sage/12 bg-sage/5 p-4">
-              <div className="text-xs uppercase tracking-[1.4px] text-sage">Top win</div>
+              <div className="flex min-w-0 flex-nowrap items-center gap-0.5">
+                <div className="min-w-0 truncate text-xs uppercase tracking-[1.4px] text-sage">Top win</div>
+                <InfoHint triggerLabel="What top win means">
+                  The prompt where your brand ranked highest across all models this cycle.
+                </InfoHint>
+              </div>
               <p className="mt-2 text-sm leading-7 text-mid">{report.executiveSummary.topWin}</p>
             </div>
             <div className="rounded-card border border-accent/25 bg-accent/10 p-4">
-              <div className="text-xs uppercase tracking-[1.4px] text-dark">Top miss</div>
+              <div className="flex min-w-0 flex-nowrap items-center gap-0.5">
+                <div className="min-w-0 truncate text-xs uppercase tracking-[1.4px] text-dark">Top miss</div>
+                <InfoHint triggerLabel="What top miss means">
+                  A different prompt where competitors appeared but your brand did not — your clearest content gap.
+                </InfoHint>
+              </div>
               <p className="mt-2 text-sm leading-7 text-mid">{report.executiveSummary.topMiss}</p>
             </div>
             <div className="rounded-card border border-sage/12 bg-white p-4 text-sm leading-7 text-mid">
@@ -229,26 +255,20 @@ export default async function CycleReportPage({
             </div>
             <h3 className="mt-2 font-display text-2xl text-dark">Where competitors are filling the gap</h3>
             <div className="mt-6 space-y-4">
-              {tierConfig.competitorBenchmarking ? (
-                report.competitorGaps.length > 0 ? (
-                  report.competitorGaps.map((gap) => (
-                    <div key={gap.promptText} className="rounded-card border border-sage/12 bg-white p-5">
-                      <div className="text-sm font-medium text-dark">{gap.promptText}</div>
-                      <p className="mt-3 text-sm leading-7 text-mid">
-                        Competitors mentioned: {gap.competitors.join(", ")}
-                      </p>
-                      <p className="mt-2 text-sm leading-7 text-mid">Likely reason: {gap.likelyReason}</p>
-                      <p className="mt-2 text-sm leading-7 text-mid">Suggested fix: {gap.suggestedFix}</p>
-                    </div>
-                  ))
-                ) : (
-                  <div className="rounded-card border border-sage/12 bg-white p-5 text-sm leading-7 text-mid">
-                    No major competitor gap prompts were detected in this cycle.
+              {report.competitorGaps.length > 0 ? (
+                report.competitorGaps.map((gap) => (
+                  <div key={gap.promptText} className="rounded-card border border-sage/12 bg-white p-5">
+                    <div className="text-sm font-medium text-dark">{gap.promptText}</div>
+                    <p className="mt-3 text-sm leading-7 text-mid">
+                      Competitors mentioned: {gap.competitors.join(", ")}
+                    </p>
+                    <p className="mt-2 text-sm leading-7 text-mid">Likely reason: {gap.likelyReason}</p>
+                    <p className="mt-2 text-sm leading-7 text-mid">Suggested fix: {gap.suggestedFix}</p>
                   </div>
-                )
+                ))
               ) : (
                 <div className="rounded-card border border-sage/12 bg-white p-5 text-sm leading-7 text-mid">
-                  Competitor gap analysis is available on Growth and Pro plans.
+                  No major competitor gap prompts were detected in this cycle.
                 </div>
               )}
             </div>

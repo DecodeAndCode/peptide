@@ -1,4 +1,5 @@
 import { signOutAction } from "@/app/(auth)/actions";
+import { DashboardTourRestartButton } from "@/components/dashboard/DashboardTourRestartButton";
 import { Badge } from "@/components/ui/Badge";
 import type { BrandRecord, CycleRecord } from "@/types";
 
@@ -40,11 +41,14 @@ export function DashboardTopbar({ brand, latestCycle }: DashboardTopbarProps) {
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex shrink-0 flex-wrap items-center justify-start gap-3 sm:justify-end">
+        <DashboardTourRestartButton />
         <button
           type="button"
-          aria-label="Notifications"
-          className="flex h-11 w-11 items-center justify-center rounded-full border border-sage/15 bg-white text-dark transition-transform duration-200 hover:-translate-y-0.5"
+          disabled
+          aria-label="Notifications (coming soon)"
+          title="Notifications are not available yet"
+          className="flex h-11 w-11 cursor-not-allowed items-center justify-center rounded-full border border-sage/15 bg-white text-dark opacity-45"
         >
           <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="1.8">
             <path d="M6.5 8.5a5.5 5.5 0 1 1 11 0v4.2l1.4 2.6a1 1 0 0 1-.88 1.47H5.98a1 1 0 0 1-.88-1.47l1.4-2.6V8.5Z" />

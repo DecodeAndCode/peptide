@@ -1,0 +1,61 @@
+{
+  "defaultPoolKey": "general_wellness",
+  "pools": {
+    "general_wellness": [
+      { "platform": "instagram", "handle": "hubermanlab", "topics": ["health", "science"] },
+      { "platform": "instagram", "handle": "drmarkhyman", "topics": ["wellness", "nutrition"] },
+      { "platform": "instagram", "handle": "thefoodmedic", "topics": ["nutrition", "women's health"] },
+      { "platform": "instagram", "handle": "mindbodygreen", "topics": ["wellness", "lifestyle"] },
+      { "platform": "tiktok", "handle": "hubermanlab", "topics": ["health", "habits"] }
+    ],
+    "nootropics_cognitive": [
+      { "platform": "instagram", "handle": "hubermanlab", "topics": ["neuroscience", "focus"] },
+      { "platform": "instagram", "handle": "foundmyfitness", "topics": ["longevity", "cognition"] },
+      { "platform": "tiktok", "handle": "hubermanlab", "topics": ["brain health"] }
+    ],
+    "greens_superfoods": [
+      { "platform": "instagram", "handle": "thefoodmedic", "topics": ["nutrition", "plants"] },
+      { "platform": "instagram", "handle": "drmarkhyman", "topics": ["functional medicine"] },
+      { "platform": "instagram", "handle": "plantbasednews", "topics": ["plant-based", "wellness"] }
+    ],
+    "adaptogens": [
+      { "platform": "instagram", "handle": "drmarkhyman", "topics": ["stress", "holistic health"] },
+      { "platform": "instagram", "handle": "theholisticpsychologist", "topics": ["stress", "mental health"] }
+    ],
+    "peptides_topical_cosmetic": [
+      { "platform": "instagram", "handle": "drdray", "topics": ["skincare", "dermatology"] },
+      { "platform": "instagram", "handle": "cassandrabankson", "topics": ["skincare", "science"] },
+      { "platform": "tiktok", "handle": "cassandrabankson", "topics": ["skincare"] }
+    ],
+    "protein_performance": [
+      { "platform": "instagram", "handle": "jeffnippard", "topics": ["fitness", "strength"] },
+      { "platform": "instagram", "handle": "athleanx", "topics": ["training", "physique"] },
+      { "platform": "instagram", "handle": "natalie.jill", "topics": ["fitness", "women"] },
+      { "platform": "tiktok", "handle": "jeffnippard", "topics": ["gym", "science"] }
+    ],
+    "sleep_recovery": [
+      { "platform": "instagram", "handle": "sleepfoundationorg", "topics": ["sleep", "health"] },
+      { "platform": "instagram", "handle": "hubermanlab", "topics": ["sleep", "circadian"] }
+    ],
+    "vitamins_minerals": [
+      { "platform": "instagram", "handle": "drmarkhyman", "topics": ["nutrition"] },
+      { "platform": "instagram", "handle": "rhitrition", "topics": ["nutrition", "science"] }
+    ],
+    "weight_management": [
+      { "platform": "instagram", "handle": "precisionnutrition", "topics": ["nutrition", "coaching"] },
+      { "platform": "instagram", "handle": "drbeckyfitness", "topics": ["weight loss", "walking"] }
+    ],
+    "gut_health": [
+      { "platform": "instagram", "handle": "theguthealthdoctor", "topics": ["gut health", "digestion"] },
+      { "platform": "instagram", "handle": "theguthealthmd", "topics": ["microbiome"] }
+    ],
+    "womens_health": [
+      { "platform": "instagram", "handle": "drjolenebrighten", "topics": ["hormones", "women"] },
+      { "platform": "instagram", "handle": "thefoodmedic", "topics": ["women's health"] }
+    ],
+    "mens_health": [
+      { "platform": "instagram", "handle": "peterattiamd", "topics": ["longevity", "men's health"] },
+      { "platform": "instagram", "handle": "hubermanlab", "topics": ["performance", "health"] }
+    ]
+  }
+}

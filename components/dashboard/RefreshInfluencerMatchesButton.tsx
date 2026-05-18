@@ -21,7 +21,10 @@ export function RefreshInfluencerMatchesButton() {
       });
 
       const payload = (await response.json().catch(() => null)) as
-        | { error?: string; matches?: { count: number } }
+        | {
+            error?: string;
+            matches?: { count: number };
+          }
         | null;
 
       if (!response.ok) {
@@ -29,8 +32,18 @@ export function RefreshInfluencerMatchesButton() {
         return;
       }
 
+      const matchCount = payload?.matches?.count ?? 0;
+
+      if (matchCount === 0) {
+        setMessage(
+          "No new creator matches were saved. Try again in a few minutes, or run another visibility cycle to refresh context.",
+        );
+        router.refresh();
+        return;
+      }
+
       setMessage(
-        `Refreshed ${payload?.matches?.count ?? 0} influencer ${payload?.matches?.count === 1 ? "match" : "matches"}.`,
+        `Updated ${matchCount} creator ${matchCount === 1 ? "match" : "matches"}. Your top suggestions are shown below.`,
       );
       router.refresh();
     });
@@ -46,7 +59,7 @@ export function RefreshInfluencerMatchesButton() {
       >
         {isPending ? "Refreshing..." : "Refresh Matches"}
       </button>
-      {message ? <p className="text-sm text-mid">{message}</p> : null}
+      {message ? <p className="text-sm text-mid whitespace-pre-line">{message}</p> : null}
     </div>
   );
 }

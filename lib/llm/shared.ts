@@ -12,4 +12,5 @@ export const ANALYSIS_SYSTEM_PROMPT =
 export const OPENAI_API_MODEL = "gpt-4o";
 export const ANTHROPIC_API_MODEL = "claude-sonnet-4-5";
 export const ANTHROPIC_SENTIMENT_MODEL = "claude-haiku-4-5-20251001";
-export const PERPLEXITY_API_MODEL = "sonar-pro";
+/** Default Perplexity chat model when `PERPLEXITY_API_MODEL` is unset. */
+export const PERPLEXITY_API_MODEL_DEFAULT = "sonar-pro";

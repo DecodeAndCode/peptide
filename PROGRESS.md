@@ -53,6 +53,11 @@
 - Supabase CLI not yet configured — migrations applied manually for now
 - Report delivery requires `RESEND_API_KEY`; production email sending
   should be switched to a verified SuppGo domain before launch
+- **Perplexity:** Pro cycles use Perplexity unless `SUPPGO_CYCLE_SKIP_PERPLEXITY=true` in non-production.
+  Logs on failure include HTTP `status` and a truncated error body under `[perplexity]`. Use `PERPLEXITY_API_MODEL`
+  if your account needs a different model slug. Influencer discovery defaults to OpenAI suggestions + SocialFetch
+  profile verification (`SOCIALFETCH_API_KEY`); set `SUPPGO_INFLUENCER_USE_PERPLEXITY=true` to restore the legacy
+  Perplexity discovery path.
 
 ## Pre-launch TODOs
 - [ ] Replace the temporary Resend sender (`onboarding@resend.dev`)

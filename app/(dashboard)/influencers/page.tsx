@@ -1,9 +1,9 @@
 import { CopyButton } from "@/components/dashboard/CopyButton";
+import { InfluencerOutreachControls } from "@/components/dashboard/InfluencerOutreachControls";
 import { RefreshInfluencerMatchesButton } from "@/components/dashboard/RefreshInfluencerMatchesButton";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { getInfluencerPageData, getInfluencerProfileUrl } from "@/lib/influencers/matcher";
-import { getTierAnalysisConfig } from "@/lib/suppgo";
 
 function formatFollowerRange(value: string | null) {
   if (value === "micro_10k_50k") {
@@ -21,13 +21,13 @@ function formatFollowerRange(value: string | null) {
   return "Follower tier pending";
 }
 
-function formatVerificationLabel(status: string | null, confidence: number | null) {
+function formatVerificationLabel(status: string | null) {
   if (status === "grounded") {
-    return `Grounded ${confidence ?? 0}/100`;
+    return "Verified profile";
   }
 
   if (status === "low_confidence") {
-    return `Low confidence ${confidence ?? 0}/100`;
+    return "Review suggested";
   }
 
   return "Needs refresh";
@@ -40,8 +40,6 @@ export default async function InfluencersPage() {
     return null;
   }
 
-  const tierConfig = getTierAnalysisConfig(data.brand.subscription_tier);
-
   return (
     <div className="space-y-6">
       <Card className="p-6 md:p-8">
@@ -51,51 +49,41 @@ export default async function InfluencersPage() {
               <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
                 Influencers
               </div>
-              <Badge variant={tierConfig.influencerMatching ? "sage" : "gold"}>
-                {tierConfig.influencerMatching ? "Pro enabled" : "Pro feature"}
-              </Badge>
+              <Badge variant="sage">Active</Badge>
             </div>
             <h2 className="mt-2 font-display text-3xl text-dark">
-              Public-web creator discovery for brand-fit outreach
+              Creator discovery for brand-fit outreach
             </h2>
             <p className="mt-4 max-w-3xl text-sm leading-7 text-mid">
-              Influencer suggestions are sourced from public web data via Perplexity and only saved
-              when SuppGo can ground them to matching platform URLs with an estimated follower
-              floor. Still verify profile quality before outreach because third-party account data
-              can change.
+              SuppGo surfaces creators whose content aligns with your brand, niche, and visibility
+              gaps from your latest cycle. Review the match rationale, open each profile to confirm
+              fit, then copy the suggested outreach message when you are ready to reach out.
             </p>
           </div>
-          {tierConfig.influencerMatching ? <RefreshInfluencerMatchesButton /> : null}
+          <RefreshInfluencerMatchesButton />
         </div>
       </Card>
 
-      {!tierConfig.influencerMatching ? (
-        <Card className="p-6 md:p-8">
-          <h3 className="font-display text-2xl text-dark">Upgrade to Pro to unlock influencer matching</h3>
-          <p className="mt-4 max-w-2xl text-sm leading-7 text-mid">
-            Pro adds Perplexity-grounded creator discovery, GPT-4o brand-fit scoring, de-duplicated
-            match rotation across cycles, and copy-ready outreach messages with direct profile links.
-          </p>
-        </Card>
-      ) : !data.latestCompletedCycle ? (
+      {!data.latestCompletedCycle ? (
         <Card className="p-6 md:p-8">
           <h3 className="font-display text-2xl text-dark">Complete a cycle to generate creator matches</h3>
           <p className="mt-4 max-w-2xl text-sm leading-7 text-mid">
-            Influencer matching uses your most recent completed cycle to prioritize niches and gap
-            prompts before discovering real public profiles.
+            Run a visibility cycle first. Creator suggestions are generated from that cycle&apos;s
+            prompts and your brand profile.
           </p>
         </Card>
       ) : data.matches.length === 0 ? (
         <Card className="p-6 md:p-8">
           <h3 className="font-display text-2xl text-dark">No matches stored for the latest cycle yet</h3>
           <p className="mt-4 max-w-2xl text-sm leading-7 text-mid">
-            Refresh matches to run a grounded discovery pass for Cycle #
-            {data.latestCompletedCycle.cycle_number}.
+            No creators met our quality bar for Cycle #{data.latestCompletedCycle.cycle_number} yet.
+            Use Refresh matches to search again, or complete another cycle to refresh the context
+            SuppGo uses for suggestions.
           </p>
         </Card>
       ) : (
         <div className="grid gap-6 xl:grid-cols-2">
-          {data.matches.map((match) => (
+          {data.topMatches.map((match) => (
             <Card key={match.id} className="border border-white/10 bg-dark p-6 text-white md:p-8">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
@@ -105,7 +93,7 @@ export default async function InfluencersPage() {
                     </Badge>
                     <Badge variant="gold">{formatFollowerRange(match.follower_range)}</Badge>
                     <Badge variant="sage" className="bg-sage/15 text-sage-light border-sage/20">
-                      {formatVerificationLabel(match.verification_status, match.verification_confidence)}
+                      {formatVerificationLabel(match.verification_status)}
                     </Badge>
                   </div>
                   <h3 className="mt-4 font-display text-2xl text-white">
@@ -140,7 +128,7 @@ export default async function InfluencersPage() {
                       rel="noreferrer"
                       className="underline decoration-white/20 underline-offset-4 hover:text-white"
                     >
-                      Source evidence
+                      View profile source
                     </a>
                   ))}
                 </div>
@@ -165,10 +153,31 @@ export default async function InfluencersPage() {
                   {match.outreach_message ?? "Outreach copy will appear here once generated."}
                 </p>
               </details>
+
+              <InfluencerOutreachControls
+                influencerId={match.id}
+                initialStatus={match.outreach_status}
+                initialNotes={match.outreach_notes}
+              />
             </Card>
           ))}
         </div>
       )}
+
+      {data.matches.length > data.topMatches.length ? (
+        <Card className="p-6 md:p-8">
+          <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
+            Additional matches
+          </div>
+          <h3 className="mt-2 font-display text-2xl text-dark">
+            {data.matches.length - data.topMatches.length} more creators are available
+          </h3>
+          <p className="mt-3 text-sm leading-7 text-mid">
+            Your top three creator suggestions appear above. Additional matches may appear in future
+            cycles as your visibility context updates.
+          </p>
+        </Card>
+      ) : null}
     </div>
   );
 }

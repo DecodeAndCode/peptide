@@ -13,12 +13,16 @@ function getClient() {
   return client;
 }
 
-export async function queryOpenAi(prompt: string): Promise<LlmTextResponse> {
+export async function queryOpenAi(
+  prompt: string,
+  options: { maxOutputTokens?: number } = {},
+): Promise<LlmTextResponse> {
+  const maxOutputTokens = options.maxOutputTokens ?? 800;
   try {
     const response = await getClient().responses.create({
       model: OPENAI_API_MODEL,
       temperature: 0.3,
-      max_output_tokens: 800,
+      max_output_tokens: maxOutputTokens,
       input: [
         {
           role: "system",

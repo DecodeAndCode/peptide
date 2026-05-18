@@ -1,4 +1,5 @@
 import { Card } from "@/components/ui/Card";
+import { InfoHint } from "@/components/ui/InfoHint";
 import { Badge } from "@/components/ui/Badge";
 import { TriggerCycleButton } from "@/components/dashboard/TriggerCycleButton";
 import { GitHubDeployButton } from "@/components/dashboard/GitHubDeployButton";
@@ -6,7 +7,7 @@ import { VisibilityGraph } from "@/components/dashboard/VisibilityGraph";
 import { getDashboardOverview } from "@/lib/dashboard";
 import { getGitHubIntegrationStatus } from "@/lib/integrations";
 import { formatRoundedValue, formatSignedRoundedValue } from "@/lib/formatting";
-import { getSubscriptionPlan, getTierAnalysisConfig } from "@/lib/suppgo";
+import { getGeneratedContentDisplay, getSubscriptionPlan } from "@/lib/suppgo";
 import { isSuppgoTestModeEnabled } from "@/lib/supabase/env";
 
 function formatDelta(value: number | null, suffix = "%") {
@@ -24,9 +25,8 @@ export default async function DashboardPage() {
     return null;
   }
 
-  const [plan, tierConfig, testModeEnabled, githubIntegration] = [
+  const [plan, testModeEnabled, githubIntegration] = [
     getSubscriptionPlan(overview.brand.subscription_tier),
-    getTierAnalysisConfig(overview.brand.subscription_tier),
     isSuppgoTestModeEnabled(),
     await getGitHubIntegrationStatus(overview.brand.id),
   ] as const;
@@ -35,7 +35,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <Card className="p-6 md:p-8">
+      <Card className="p-6 md:p-8" data-tour="overview">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
@@ -52,13 +52,13 @@ export default async function DashboardPage() {
           <div className="flex flex-wrap items-center gap-3">
             <Badge variant="gold">{plan.name}</Badge>
             <Badge variant={testModeEnabled ? "gold" : "dark"}>
-              {testModeEnabled ? "Test mode cap active" : "Tier limits active"}
+              {testModeEnabled ? "Test mode cap active" : "All features active"}
             </Badge>
           </div>
         </div>
       </Card>
 
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4" data-tour="kpis">
         <Card className="p-6">
           <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
             Current visibility score
@@ -96,7 +96,7 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.5fr_0.9fr]">
-        <Card className="p-6 md:p-8">
+        <Card className="p-6 md:p-8" data-tour="trend">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
@@ -114,7 +114,7 @@ export default async function DashboardPage() {
           </div>
         </Card>
 
-        <Card className="p-6 md:p-8">
+        <Card className="p-6 md:p-8" data-tour="cycle">
           <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
             Site readiness
           </div>
@@ -135,8 +135,7 @@ export default async function DashboardPage() {
             <TriggerCycleButton />
           </div>
           <p className="mt-4 text-xs leading-6 text-mid">
-            When test mode is enabled, the runner trims the cycle before model dispatch according
-            to your configured test execution cap.
+            When test mode is enabled, the runner trims the cycle before model dispatch according to your configured test execution cap.
           </p>
         </Card>
       </div>
@@ -179,41 +178,33 @@ export default async function DashboardPage() {
                 </tr>
               </thead>
               <tbody>
-                {tierConfig.competitorBenchmarking ? (
-                  overview.competitorRows.length > 0 ? (
-                    overview.competitorRows.map((row) => (
-                      <tr key={row.competitorName} className="border-b border-sage/8">
-                        <td className="py-4 pr-4 font-medium text-dark">{row.competitorName}</td>
-                        <td className="py-4 pr-4">{row.mentionCount}</td>
-                        <td className="py-4 pr-4">
-                          {row.vsClientMentionCount >= 0 ? "+" : ""}
-                          {row.vsClientMentionCount}
-                        </td>
-                        <td className="py-4">
-                          {overview.latestCompletedCycle ? (
-                            <a
-                              href={`/reports/${overview.latestCompletedCycle.id}#gap-analysis`}
-                              className="text-sage underline-offset-4 hover:underline"
-                            >
-                              {row.gapPromptCount} gap prompts
-                            </a>
-                          ) : (
-                            `${row.gapPromptCount} gap prompts`
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={4} className="py-6 text-mid">
-                        Competitor benchmarking will populate after completed cycles collect prompt-level gap data.
+                {overview.competitorRows.length > 0 ? (
+                  overview.competitorRows.map((row) => (
+                    <tr key={row.competitorName} className="border-b border-sage/8">
+                      <td className="py-4 pr-4 font-medium text-dark">{row.competitorName}</td>
+                      <td className="py-4 pr-4">{row.mentionCount}</td>
+                      <td className="py-4 pr-4">
+                        {row.vsClientMentionCount >= 0 ? "+" : ""}
+                        {row.vsClientMentionCount}
+                      </td>
+                      <td className="py-4">
+                        {overview.latestCompletedCycle ? (
+                          <a
+                            href={`/reports/${overview.latestCompletedCycle.id}#gap-analysis`}
+                            className="text-sage underline-offset-4 hover:underline"
+                          >
+                            {row.gapPromptCount} gap prompts
+                          </a>
+                        ) : (
+                          `${row.gapPromptCount} gap prompts`
+                        )}
                       </td>
                     </tr>
-                  )
+                  ))
                 ) : (
                   <tr>
                     <td colSpan={4} className="py-6 text-mid">
-                      Competitor benchmarking is available on Growth and Pro plans.
+                      Competitor benchmarking will populate after completed cycles collect prompt-level gap data.
                     </td>
                   </tr>
                 )}
@@ -237,13 +228,21 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      <Card className="p-6 md:p-8">
+      <Card className="p-6 md:p-8" data-tour="drafts">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">
               Latest generated content
             </div>
-            <h3 className="mt-2 font-display text-2xl text-dark">Cycle-linked drafts ready for review</h3>
+            <div className="mt-2 flex min-w-0 flex-nowrap items-start gap-1.5">
+              <h3 className="min-w-0 font-display text-2xl text-dark leading-snug">
+                Cycle-linked drafts ready for review
+              </h3>
+              <InfoHint triggerLabel="What this section contains">
+                Latest drafts from your most recent completed cycle: stack guides, FAQ snippets, and brand
+                context—each type is tied to a specific kind of missed prompt.
+              </InfoHint>
+            </div>
           </div>
           <div className="flex items-center gap-3">
             {hasGitHub ? (
@@ -263,24 +262,31 @@ export default async function DashboardPage() {
         </div>
         <div className="mt-6 grid gap-4 md:grid-cols-3">
           {overview.latestGeneratedContent.length > 0 ? (
-            overview.latestGeneratedContent.slice(0, 3).map((item) => (
-              <div key={item.id} className="flex flex-col rounded-card border border-sage/12 bg-white p-5">
-                <div className="text-xs font-medium uppercase tracking-[1.4px] text-sage">
-                  {item.content_type.replaceAll("_", " ")}
+            overview.latestGeneratedContent.slice(0, 3).map((item) => {
+              const draft = getGeneratedContentDisplay(item.content_type);
+              return (
+                <div key={item.id} className="flex flex-col rounded-card border border-sage/12 bg-white p-5">
+                  <div className="flex min-w-0 flex-nowrap items-center gap-0.5">
+                    <span
+                      className="min-w-0 truncate text-xs font-medium uppercase tracking-[1.4px] text-sage"
+                      title={draft.label}
+                    >
+                      {draft.label}
+                    </span>
+                    <InfoHint triggerLabel={`What “${draft.label}” means`}>{draft.rationale}</InfoHint>
+                  </div>
+                  <div className="mt-3 font-medium text-dark">{item.title ?? "Untitled draft"}</div>
+                  <p className="mt-3 text-sm leading-6 text-mid">
+                    {item.body.slice(0, 180)}
+                    {item.body.length > 180 ? "..." : ""}
+                  </p>
+                  {hasGitHub ? <GitHubDeployButton contentId={item.id} /> : null}
                 </div>
-                <div className="mt-3 font-medium text-dark">{item.title ?? "Untitled draft"}</div>
-                <p className="mt-3 text-sm leading-6 text-mid">
-                  {item.body.slice(0, 180)}
-                  {item.body.length > 180 ? "..." : ""}
-                </p>
-                {hasGitHub ? <GitHubDeployButton contentId={item.id} /> : null}
-              </div>
-            ))
+              );
+            })
           ) : (
             <div className="rounded-card border border-sage/12 bg-white p-5 text-sm leading-6 text-mid md:col-span-3">
-              {tierConfig.productInteractionContent
-                ? "Generated product interaction drafts, FAQ snippets, and llms.txt recommendations appear here after a completed cycle finishes post-processing."
-                : "FAQ snippets and llms.txt recommendations appear here after a completed cycle finishes post-processing. Product interaction drafts unlock on Growth and Pro."}
+              Stack guides, FAQ snippets, and brand context drafts appear here after a completed cycle finishes post-processing.
             </div>
           )}
         </div>

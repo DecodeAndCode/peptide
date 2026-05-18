@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { generateCycleInfluencerMatches } from "@/lib/influencers/matcher";
 import { enforceRateLimit, enforceSameOrigin } from "@/lib/security";
+import { getInfluencerDiscoveryBackend } from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 import { getTierAnalysisConfig } from "@/lib/suppgo";
 import type { BrandRecord, CycleRecord, PromptRecord, SiteAnalysisRecord } from "@/types";
@@ -85,7 +86,8 @@ export async function POST(request: Request) {
     .returns<PromptRecord[]>();
 
   try {
-    const matches = await generateCycleInfluencerMatches({
+    const discoveryBackend = getInfluencerDiscoveryBackend();
+    const { matches, refreshNote } = await generateCycleInfluencerMatches({
       brand,
       cycle,
       prompts: prompts ?? [],
@@ -95,7 +97,10 @@ export async function POST(request: Request) {
     return NextResponse.json({
       matches: {
         count: matches.length,
+        top3Count: matches.slice(0, 3).length,
+        discoveryBackend,
       },
+      refreshNote,
     });
   } catch {
     return NextResponse.json(
