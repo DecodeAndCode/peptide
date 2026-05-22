@@ -22,6 +22,11 @@ export interface ProviderCandidateHit {
   handle: string;
   platform: InfluencerPlatform;
   followerEstimate: string;
+  postCountEstimate: string;
+  lastActive: string;
+  engagementSignals: string;
+  evidenceQuotes: string[];
+  externalCitations: string[];
   topics: string[];
   sourceUrl: string | null;
   citationUrls: string[];
@@ -32,6 +37,11 @@ export interface DiscoveryCandidate {
   handle: string;
   platform: InfluencerPlatform;
   followerEstimate: string;
+  postCountEstimate: string;
+  lastActive: string;
+  engagementSignals: string;
+  evidenceQuotes: string[];
+  externalCitations: string[];
   topics: string[];
   sourceUrls: string[];
   verificationStatus: InfluencerVerificationStatus;

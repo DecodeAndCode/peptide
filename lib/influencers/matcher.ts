@@ -52,10 +52,15 @@ interface ScoredCandidate extends DiscoveryCandidate {
   fitScore: number;
 }
 
-const MIN_INFLUENCER_FOLLOWERS = 3_000;
+const MIN_INFLUENCER_FOLLOWERS = 10_000;
+const MIN_INFLUENCER_POST_COUNT = 30;
 const MIN_VERIFICATION_CONFIDENCE = 70;
+const MIN_LEGITIMACY_SCORE = 6;
+const MAX_LAST_ACTIVE_MONTHS = 6;
 const INFLUENCER_COOLDOWN_CYCLES = 3;
 const MAX_INFLUENCER_MATCHES_SAVED_PER_CYCLE = 3;
+
+const PROFILE_HOSTS = ["instagram.com", "tiktok.com"];
 
 export interface InfluencerPageData {
   brand: BrandRecord;
@@ -128,6 +133,87 @@ function parseFollowerEstimate(value: string) {
   const multiplier = suffix === "m" ? 1_000_000 : suffix === "b" ? 1_000_000_000 : suffix === "k" ? 1_000 : 1;
 
   return Math.round(amount * multiplier);
+}
+
+function parsePostCount(value: string) {
+  const trimmed = value.trim().toLowerCase().replace(/,/g, "");
+  if (!trimmed) {
+    return null;
+  }
+
+  const normalized = trimmed
+    .replace(/\+/g, "")
+    .replace(/\bposts?\b/gi, "")
+    .replace(/\bvideos?\b/gi, "")
+    .trim();
+
+  const match = normalized.match(/(\d+(?:\.\d+)?)\s*([kmb])?/i);
+  if (!match) {
+    return null;
+  }
+
+  const amount = Number(match[1]);
+  if (!Number.isFinite(amount)) {
+    return null;
+  }
+
+  const suffix = match[2]?.toLowerCase();
+  const multiplier = suffix === "m" ? 1_000_000 : suffix === "k" ? 1_000 : suffix === "b" ? 1_000_000_000 : 1;
+
+  return Math.round(amount * multiplier);
+}
+
+/**
+ * Approximate "months since last active" from a free-text claim like
+ * "posted within last week" / "last post 2 months ago" / "active this week".
+ * Returns null if no temporal signal is found.
+ */
+function estimateMonthsSinceLastActive(value: string): number | null {
+  const trimmed = value.trim().toLowerCase();
+  if (!trimmed) {
+    return null;
+  }
+
+  if (/\b(today|yesterday|hours? ago|this week|past week|last week|within (?:the )?week)\b/.test(trimmed)) {
+    return 0;
+  }
+
+  const dayMatch = trimmed.match(/(\d+)\s*days?\s*ago/);
+  if (dayMatch) {
+    return Math.max(0, Math.floor(Number(dayMatch[1]) / 30));
+  }
+
+  const weekMatch = trimmed.match(/(\d+)\s*weeks?\s*ago/);
+  if (weekMatch) {
+    return Math.max(0, Math.floor(Number(weekMatch[1]) / 4));
+  }
+
+  const monthMatch = trimmed.match(/(\d+)\s*months?\s*ago/);
+  if (monthMatch) {
+    return Number(monthMatch[1]);
+  }
+
+  const yearMatch = trimmed.match(/(\d+)\s*years?\s*ago/);
+  if (yearMatch) {
+    return Number(yearMatch[1]) * 12;
+  }
+
+  if (/\b(active|posts? regularly|posts? often|posting often|currently active|regularly|weekly|daily|monthly)\b/.test(trimmed)) {
+    return 0;
+  }
+
+  return null;
+}
+
+function hasExternalCitation(urls: string[]): boolean {
+  return urls.some((url) => {
+    try {
+      const host = new URL(url).hostname.replace(/^www\./, "").replace(/^m\./, "");
+      return !PROFILE_HOSTS.some((profileHost) => host.endsWith(profileHost));
+    } catch {
+      return false;
+    }
+  });
 }
 
 function extractHandleFromProfileUrl(platform: InfluencerPlatform, value: string) {
@@ -237,23 +323,79 @@ function getProfileUrl(platform: InfluencerPlatform, handle: string) {
     : `https://www.tiktok.com/@${handle}`;
 }
 
-function validateDiscoveryCandidate(hit: ProviderCandidateHit) {
-  const { handle, platform, followerEstimate, topics, sourceUrl, citationUrls } = hit;
+interface ValidationRejection {
+  reason:
+    | "missing_handle"
+    | "no_profile_url"
+    | "follower_floor"
+    | "follower_unparseable"
+    | "post_count_floor"
+    | "post_count_unparseable"
+    | "stale_or_unknown_activity"
+    | "missing_evidence_quotes"
+    | "missing_external_citation";
+  meta?: Record<string, string | number | null>;
+}
+
+function validateDiscoveryCandidate(hit: ProviderCandidateHit): DiscoveryCandidate | ValidationRejection {
+  const {
+    handle,
+    platform,
+    followerEstimate,
+    postCountEstimate,
+    lastActive,
+    engagementSignals,
+    evidenceQuotes,
+    externalCitations,
+    topics,
+    sourceUrl,
+    citationUrls,
+  } = hit;
+
   const normalizedHandle = normalizeHandle(handle);
   if (!normalizedHandle) {
-    return null;
+    return { reason: "missing_handle" };
   }
 
-  const evidenceUrls = dedupeStrings([sourceUrl ?? "", ...citationUrls]);
+  const evidenceUrls = dedupeStrings([sourceUrl ?? "", ...citationUrls, ...externalCitations]);
   const matchingProfileUrls = getMatchingProfileUrls(platform, normalizedHandle, evidenceUrls);
 
   if (matchingProfileUrls.length === 0) {
-    return null;
+    return { reason: "no_profile_url", meta: { handle: normalizedHandle, platform } };
   }
 
   const parsedFollowerCount = parseFollowerEstimate(followerEstimate);
-  if (parsedFollowerCount === null || parsedFollowerCount < MIN_INFLUENCER_FOLLOWERS) {
-    return null;
+  if (parsedFollowerCount === null) {
+    return { reason: "follower_unparseable", meta: { handle: normalizedHandle, value: followerEstimate } };
+  }
+  if (parsedFollowerCount < MIN_INFLUENCER_FOLLOWERS) {
+    return { reason: "follower_floor", meta: { handle: normalizedHandle, count: parsedFollowerCount } };
+  }
+
+  const parsedPostCount = parsePostCount(postCountEstimate);
+  if (parsedPostCount === null) {
+    return { reason: "post_count_unparseable", meta: { handle: normalizedHandle, value: postCountEstimate } };
+  }
+  if (parsedPostCount < MIN_INFLUENCER_POST_COUNT) {
+    return { reason: "post_count_floor", meta: { handle: normalizedHandle, count: parsedPostCount } };
+  }
+
+  const monthsSinceActive = estimateMonthsSinceLastActive(lastActive);
+  if (monthsSinceActive === null || monthsSinceActive > MAX_LAST_ACTIVE_MONTHS) {
+    return {
+      reason: "stale_or_unknown_activity",
+      meta: { handle: normalizedHandle, lastActive, months: monthsSinceActive },
+    };
+  }
+
+  const trimmedQuotes = evidenceQuotes.map((quote) => quote.trim()).filter((quote) => quote.length >= 5);
+  if (trimmedQuotes.length === 0) {
+    return { reason: "missing_evidence_quotes", meta: { handle: normalizedHandle } };
+  }
+
+  const combinedCitations = dedupeStrings([...externalCitations, ...citationUrls]);
+  if (!hasExternalCitation(combinedCitations)) {
+    return { reason: "missing_external_citation", meta: { handle: normalizedHandle } };
   }
 
   const trimmedSource = sourceUrl?.trim() ?? "";
@@ -265,25 +407,50 @@ function validateDiscoveryCandidate(hit: ProviderCandidateHit) {
     (url) => getMatchingProfileUrls(platform, normalizedHandle, [url]).length > 0,
   );
 
+  const externalCitationCount = combinedCitations.filter((url) => {
+    try {
+      const host = new URL(url).hostname.replace(/^www\./, "").replace(/^m\./, "");
+      return !PROFILE_HOSTS.some((profileHost) => host.endsWith(profileHost));
+    } catch {
+      return false;
+    }
+  }).length;
+
   const confidence = Math.min(
     100,
-    58 +
-      (sourceUrlMatchesProfile ? 14 : 0) +
-      (citationMatchesProfile ? 12 : 0) +
-      Math.min(10, matchingProfileUrls.length * 5) +
-      Math.min(6, topics.length > 0 ? 6 : 0),
+    52 +
+      (sourceUrlMatchesProfile ? 12 : 0) +
+      (citationMatchesProfile ? 10 : 0) +
+      Math.min(8, matchingProfileUrls.length * 4) +
+      Math.min(6, trimmedQuotes.length * 2) +
+      Math.min(8, externalCitationCount * 3) +
+      (engagementSignals.trim().length > 0 ? 4 : 0),
   );
 
   return {
     handle: normalizedHandle,
     platform,
     followerEstimate,
+    postCountEstimate,
+    lastActive,
+    engagementSignals,
+    evidenceQuotes: trimmedQuotes,
+    externalCitations: combinedCitations,
     topics: topics.slice(0, 5),
     sourceUrls: matchingProfileUrls,
     verificationStatus:
       confidence >= MIN_VERIFICATION_CONFIDENCE ? ("grounded" as const) : ("low_confidence" as const),
     verificationConfidence: confidence,
   };
+}
+
+function isValidationRejection(value: unknown): value is ValidationRejection {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "reason" in value &&
+    typeof (value as { reason: unknown }).reason === "string"
+  );
 }
 
 async function verifyDiscoveryCandidatesWithSocialFetch(
@@ -375,6 +542,102 @@ function rankScoredMatches(matches: ScoredCandidate[]) {
   });
 }
 
+const legitimacySchema = z.array(
+  z.object({
+    handle: z.string().trim().min(1),
+    platform: z.enum(["instagram", "tiktok"]),
+    legitimacy_score: z.number().min(0).max(10),
+    reason: z.string().trim().min(1).max(280).optional().default(""),
+  }),
+);
+
+async function filterCandidatesByLegitimacy(
+  context: InfluencerProviderContext,
+  candidates: DiscoveryCandidate[],
+): Promise<DiscoveryCandidate[]> {
+  if (candidates.length === 0) {
+    return candidates;
+  }
+
+  const compact = candidates.map((candidate) => ({
+    handle: candidate.handle,
+    platform: candidate.platform,
+    follower_estimate: candidate.followerEstimate,
+    post_count_estimate: candidate.postCountEstimate,
+    last_active: candidate.lastActive,
+    engagement_signals: candidate.engagementSignals,
+    topics: candidate.topics.slice(0, 5),
+    evidence_quotes: candidate.evidenceQuotes.slice(0, 3),
+    external_citations: candidate.externalCitations.slice(0, 4),
+    source_urls: candidate.sourceUrls.slice(0, 2),
+  }));
+
+  try {
+    const response = await queryOpenAi(
+      [
+        "You are screening influencer candidates for outreach. For each candidate, judge whether they appear to be a REAL, ACTIVE, ENGAGED public creator (not a parody account, ghost account, low-quality account, or fabricated handle).",
+        `Brand context: ${context.brand.brand_name} (${context.brand.industry_tags.map(getIndustryLabel).join(", ") || "general wellness"}).`,
+        "Score each candidate from 0 to 10:",
+        "  - 0–3: looks suspicious, dormant, or hallucinated (thin evidence, inconsistent numbers, no external citations).",
+        "  - 4–5: real but weak (low engagement, sparse posting, or only profile-URL evidence).",
+        "  - 6–7: real and active, but evidence is not strong; could be worth outreach.",
+        "  - 8–10: well-known or clearly active; multiple external sources confirm activity.",
+        "Reject (score < 6) when: evidence_quotes are vague, external_citations are missing or only the creator's own profile, follower count seems implausible for the engagement claimed, last_active is unclear.",
+        `Candidates (use ONLY these fields; do NOT invent data): ${JSON.stringify(compact)}`,
+        'Return JSON array only: [{"handle":"","platform":"instagram|tiktok","legitimacy_score":0,"reason":""}]. No markdown.',
+      ].join("\n"),
+      { maxOutputTokens: 1_536 },
+    );
+
+    const parsed = parseJsonArray(response.text, legitimacySchema);
+    if (!parsed) {
+      console.warn("[influencer-matcher]", {
+        stage: "legitimacy_parse_empty",
+        candidateCount: candidates.length,
+        textPreview: response.text.trim().slice(0, 200),
+      });
+      return candidates;
+    }
+
+    const scores = new Map<string, { score: number; reason: string }>();
+    for (const row of parsed) {
+      const key = `${row.platform}:${normalizeHandle(row.handle)}`;
+      scores.set(key, { score: row.legitimacy_score, reason: row.reason });
+    }
+
+    const kept: DiscoveryCandidate[] = [];
+    for (const candidate of candidates) {
+      const key = `${candidate.platform}:${candidate.handle}`;
+      const result = scores.get(key);
+      if (!result) {
+        console.info("[influencer-matcher]", {
+          stage: "legitimacy_missing_score",
+          handle: candidate.handle,
+          platform: candidate.platform,
+        });
+        kept.push(candidate);
+        continue;
+      }
+      if (result.score < MIN_LEGITIMACY_SCORE) {
+        console.info("[influencer-matcher]", {
+          stage: "legitimacy_rejected",
+          handle: candidate.handle,
+          platform: candidate.platform,
+          score: result.score,
+          reason: result.reason,
+        });
+        continue;
+      }
+      kept.push(candidate);
+    }
+
+    return kept;
+  } catch (error) {
+    logInfluencerError("legitimacy", error, { candidateCount: candidates.length });
+    return candidates;
+  }
+}
+
 async function discoverInfluencersWithProviders(
   context: InfluencerProviderContext,
 ): Promise<{ candidates: DiscoveryCandidate[]; discoveryHint?: string }> {
@@ -389,18 +652,47 @@ async function discoverInfluencersWithProviders(
     }
 
     const rawPerplexityHits = await discoverWithPerplexity(context);
-    const validatedFromPerplexity = rawPerplexityHits
-      .map(validateDiscoveryCandidate)
-      .filter((item): item is DiscoveryCandidate => Boolean(item));
+    const validatedFromPerplexity: DiscoveryCandidate[] = [];
+    const rejectionReasons: Record<string, number> = {};
+
+    for (const hit of rawPerplexityHits) {
+      const outcome = validateDiscoveryCandidate(hit);
+      if (isValidationRejection(outcome)) {
+        rejectionReasons[outcome.reason] = (rejectionReasons[outcome.reason] ?? 0) + 1;
+        console.info("[influencer-matcher]", {
+          stage: "grounding_missing",
+          reason: outcome.reason,
+          handle: hit.handle,
+          platform: hit.platform,
+          ...outcome.meta,
+        });
+        continue;
+      }
+      validatedFromPerplexity.push(outcome);
+    }
+
     if (rawPerplexityHits.length > 0 && validatedFromPerplexity.length === 0) {
       console.warn("[influencer-matcher]", {
         stage: "perplexity_hits_all_filtered",
         rawCount: rawPerplexityHits.length,
+        rejectionReasons,
+      });
+    } else if (rawPerplexityHits.length > 0) {
+      console.info("[influencer-matcher]", {
+        stage: "perplexity_grounding_summary",
+        rawCount: rawPerplexityHits.length,
+        validatedCount: validatedFromPerplexity.length,
+        rejectionReasons,
       });
     }
     const deduped = dedupeCandidates(validatedFromPerplexity);
 
     let candidatesOut = deduped;
+
+    const beforeLegitimacy = candidatesOut.length;
+    if (candidatesOut.length > 0) {
+      candidatesOut = await filterCandidatesByLegitimacy(context, candidatesOut);
+    }
 
     if (shouldVerifyPerplexityCandidatesWithSocialFetch() && candidatesOut.length > 0) {
       const verified = await verifyDiscoveryCandidatesWithSocialFetch(candidatesOut, MIN_INFLUENCER_FOLLOWERS);
@@ -415,10 +707,13 @@ async function discoverInfluencersWithProviders(
     }
 
     if (candidatesOut.length === 0 && rawPerplexityHits.length > 0) {
+      const dominantReason = Object.entries(rejectionReasons).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+      const legitimacyDropped = beforeLegitimacy > 0;
       return {
         candidates: [],
-        discoveryHint:
-          "Perplexity returned names that failed SuppGo checks. Each creator needs (1) a canonical profile URL in source_url or in cited links that matches the handle — instagram.com/{handle} or tiktok.com/@{handle} — and (2) follower_estimate parseable as at least 3,000 (e.g. 8500, 12k, 1.2M). Enable SUPPGO_INFLUENCER_VERIFY_WITH_SOCIALFETCH=true plus SOCIALFETCH_API_KEY to require live profile confirmation.",
+        discoveryHint: legitimacyDropped
+          ? `Perplexity returned ${rawPerplexityHits.length} candidate${rawPerplexityHits.length === 1 ? "" : "s"} but none passed the legitimacy review (score < ${MIN_LEGITIMACY_SCORE}/10). Try refreshing again or run a new cycle for fresh search context.`
+          : `Perplexity returned ${rawPerplexityHits.length} candidate${rawPerplexityHits.length === 1 ? "" : "s"} but none met SuppGo's evidence requirements (follower count >= ${MIN_INFLUENCER_FOLLOWERS.toLocaleString()}, post count >= ${MIN_INFLUENCER_POST_COUNT}, active within ${MAX_LAST_ACTIVE_MONTHS} months, verbatim evidence snippets, and at least one non-profile citation URL). ${dominantReason ? `Most common rejection: ${dominantReason}.` : ""} Try refreshing again or run a new cycle for fresh search context.`,
       };
     }
 
@@ -548,6 +843,11 @@ async function scoreCandidatesWithOpenAi({
         handle: normalizeHandle(candidate.handle),
         platform: candidate.platform,
         followerEstimate: matched?.followerEstimate ?? "",
+        postCountEstimate: matched?.postCountEstimate ?? "",
+        lastActive: matched?.lastActive ?? "",
+        engagementSignals: matched?.engagementSignals ?? "",
+        evidenceQuotes: matched?.evidenceQuotes ?? [],
+        externalCitations: matched?.externalCitations ?? [],
         topics: matched?.topics ?? [],
         sourceUrls: matched?.sourceUrls ?? [],
         verificationStatus: matched?.verificationStatus ?? "low_confidence",
