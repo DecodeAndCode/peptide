@@ -1,17 +1,23 @@
 import "server-only";
 import {
   buildWebflowDashboardUrl,
-  contentToHtml,
-  createWebflowDraftItem,
-  getWebflowCollection,
-  listWebflowCollections,
-  listWebflowItems,
-  listWebflowSites,
-  updateWebflowDraftItem,
   type WebflowCollection,
   type WebflowField,
   type WebflowItem,
 } from "@/lib/webflow/client";
+import {
+  createDryRunAdapter,
+  createHttpAdapter,
+  shouldUseDryRun,
+  type WebflowAdapter,
+} from "@/lib/webflow/adapter";
+import {
+  buildExcerpt,
+  normalizeText,
+  paragraphsToHtml,
+  prettifyContentType,
+  slugify,
+} from "@/lib/text";
 import {
   createCmsDeploymentRun,
   getDecryptedAccessToken,
@@ -32,9 +38,10 @@ interface DeployCycleOptions {
   brand: BrandRecord;
   cycleId: string;
   content: GeneratedContentRecord[];
+  dryRun?: boolean;
 }
 
-interface FieldMapping {
+export interface FieldMapping {
   title: string;
   slug: string;
   body: string | null;
@@ -52,12 +59,24 @@ const MIN_COLLECTION_SCORE = 35;
 const MIN_UPDATE_MATCH_SCORE = 85;
 
 export async function deployCycleToWebflow(opts: DeployCycleOptions): Promise<CmsDeploymentRunRecord> {
-  const integration = await getWebflowIntegration(opts.brand.id);
-  if (!integration || integration.status !== "active") {
-    throw new Error("Webflow is not connected. Connect it in Settings first.");
+  const dryRun = shouldUseDryRun({ dryRun: opts.dryRun });
+
+  let adapter: WebflowAdapter;
+  let savedSiteId: string | null = null;
+  let persistSiteConfig = true;
+
+  if (dryRun) {
+    adapter = createDryRunAdapter();
+    persistSiteConfig = false;
+  } else {
+    const integration = await getWebflowIntegration(opts.brand.id);
+    if (!integration || integration.status !== "active") {
+      throw new Error("Webflow is not connected. Connect it in Settings first.");
+    }
+    adapter = createHttpAdapter(getDecryptedAccessToken(integration));
+    savedSiteId = integration.credentials.site_id ?? null;
   }
 
-  const accessToken = getDecryptedAccessToken(integration);
   const run = await createCmsDeploymentRun({
     cycleId: opts.cycleId,
     brandId: opts.brand.id,
@@ -70,11 +89,18 @@ export async function deployCycleToWebflow(opts: DeployCycleOptions): Promise<Cm
   let updatedCount = 0;
   let skippedCount = 0;
 
+  if (dryRun) {
+    warnings.push(
+      "DRY RUN — no real Webflow calls were made. Drafts were simulated with in-memory fixtures.",
+    );
+  }
+
   try {
     const site = await resolveWebflowSite({
-      accessToken,
+      adapter,
       brandId: opts.brand.id,
-      savedSiteId: integration.credentials.site_id ?? null,
+      savedSiteId,
+      persistSiteConfig,
     });
 
     warnings.push(
@@ -96,7 +122,7 @@ export async function deployCycleToWebflow(opts: DeployCycleOptions): Promise<Cm
       });
     }
 
-    const collections = await listWebflowCollections(accessToken, site.id);
+    const collections = await adapter.listCollections(site.id);
     const contentToDeploy = opts.content.filter((item) => item.content_type !== "llms_txt");
 
     if (contentToDeploy.length === 0) {
@@ -107,7 +133,7 @@ export async function deployCycleToWebflow(opts: DeployCycleOptions): Promise<Cm
     const itemCache = new Map<string, WebflowItem[]>();
 
     for (const item of contentToDeploy) {
-      const target = await selectCollectionTarget(accessToken, collections, item, collectionCache);
+      const target = await selectCollectionTarget(adapter, collections, item, collectionCache);
 
       if (!target) {
         skippedCount += 1;
@@ -126,13 +152,12 @@ export async function deployCycleToWebflow(opts: DeployCycleOptions): Promise<Cm
         continue;
       }
 
-      const items = await getCachedItems(accessToken, target.collection.id, itemCache);
+      const items = await getCachedItems(adapter, target.collection.id, itemCache);
       const existing = findExistingItem(item, items);
       const fieldData = buildFieldData(item, opts.brand, target.mapping, existing?.item);
 
       if (existing && existing.score >= MIN_UPDATE_MATCH_SCORE) {
-        const result = await updateWebflowDraftItem({
-          accessToken,
+        const result = await adapter.updateDraftItem({
           collectionId: target.collection.id,
           itemId: existing.item.id,
           fieldData,
@@ -175,8 +200,7 @@ export async function deployCycleToWebflow(opts: DeployCycleOptions): Promise<Cm
           metadata: { matchScore: existing.score, collectionId: target.collection.id },
         });
       } else {
-        const result = await createWebflowDraftItem({
-          accessToken,
+        const result = await adapter.createDraftItem({
           collectionId: target.collection.id,
           fieldData,
         });
@@ -239,29 +263,32 @@ export async function deployCycleToWebflow(opts: DeployCycleOptions): Promise<Cm
 }
 
 async function resolveWebflowSite(opts: {
-  accessToken: string;
+  adapter: WebflowAdapter;
   brandId: string;
   savedSiteId: string | null;
+  persistSiteConfig: boolean;
 }): Promise<WebflowSiteSummary> {
-  const sites = await listWebflowSites(opts.accessToken);
+  const sites = await opts.adapter.listSites();
   const site = sites.find((candidate) => candidate.id === opts.savedSiteId) ?? sites[0];
 
   if (!site) {
     throw new Error("No Webflow sites were available for this account.");
   }
 
-  await updateWebflowSiteConfig({
-    brandId: opts.brandId,
-    siteId: site.id,
-    siteName: site.displayName,
-    previewUrl: site.previewUrl,
-  });
+  if (opts.persistSiteConfig) {
+    await updateWebflowSiteConfig({
+      brandId: opts.brandId,
+      siteId: site.id,
+      siteName: site.displayName,
+      previewUrl: site.previewUrl,
+    });
+  }
 
   return site;
 }
 
 async function selectCollectionTarget(
-  accessToken: string,
+  adapter: WebflowAdapter,
   collections: WebflowCollection[],
   content: GeneratedContentRecord,
   cache: Map<string, WebflowCollection>,
@@ -269,7 +296,7 @@ async function selectCollectionTarget(
   const scored: CollectionTarget[] = [];
 
   for (const collectionSummary of collections) {
-    const collection = await getCachedCollection(accessToken, collectionSummary.id, cache);
+    const collection = await getCachedCollection(adapter, collectionSummary.id, cache);
     const mapping = inferFieldMapping(collection.fields ?? []);
     if (!mapping) continue;
 
@@ -283,30 +310,30 @@ async function selectCollectionTarget(
 }
 
 async function getCachedCollection(
-  accessToken: string,
+  adapter: WebflowAdapter,
   collectionId: string,
   cache: Map<string, WebflowCollection>,
 ) {
   const cached = cache.get(collectionId);
   if (cached) return cached;
-  const collection = await getWebflowCollection(accessToken, collectionId);
+  const collection = await adapter.getCollection(collectionId);
   cache.set(collectionId, collection);
   return collection;
 }
 
 async function getCachedItems(
-  accessToken: string,
+  adapter: WebflowAdapter,
   collectionId: string,
   cache: Map<string, WebflowItem[]>,
 ) {
   const cached = cache.get(collectionId);
   if (cached) return cached;
-  const items = await listWebflowItems(accessToken, collectionId);
+  const items = await adapter.listItems(collectionId);
   cache.set(collectionId, items);
   return items;
 }
 
-function inferFieldMapping(fields: WebflowField[]): FieldMapping | null {
+export function inferFieldMapping(fields: WebflowField[]): FieldMapping | null {
   const editable = fields.filter((field) => field.isEditable);
   const title = findField(editable, ["name", "title", "headline", "question"]);
   const slug = findField(editable, ["slug"]);
@@ -340,7 +367,7 @@ function inferFieldMapping(fields: WebflowField[]): FieldMapping | null {
   };
 }
 
-function findField(fields: WebflowField[], names: string[]) {
+export function findField(fields: WebflowField[], names: string[]) {
   const normalizedNames = names.map(normalizeText);
   return fields.find((field) => {
     const candidates = [field.slug, field.displayName].map(normalizeText);
@@ -348,7 +375,7 @@ function findField(fields: WebflowField[], names: string[]) {
   });
 }
 
-function scoreCollection(collection: WebflowCollection, content: GeneratedContentRecord, mapping: FieldMapping) {
+export function scoreCollection(collection: WebflowCollection, content: GeneratedContentRecord, mapping: FieldMapping) {
   const name = normalizeText(`${collection.displayName} ${collection.singularName}`);
   let score = 0;
 
@@ -363,7 +390,7 @@ function scoreCollection(collection: WebflowCollection, content: GeneratedConten
   return score;
 }
 
-function findExistingItem(content: GeneratedContentRecord, items: WebflowItem[]) {
+export function findExistingItem(content: GeneratedContentRecord, items: WebflowItem[]) {
   const title = content.title ?? content.content_type;
   const slug = slugify(title);
   let best: { item: WebflowItem; score: number } | null = null;
@@ -387,7 +414,7 @@ function findExistingItem(content: GeneratedContentRecord, items: WebflowItem[])
   return best && best.score > 0 ? best : null;
 }
 
-function buildFieldData(
+export function buildFieldData(
   content: GeneratedContentRecord,
   brand: BrandRecord,
   mapping: FieldMapping,
@@ -401,7 +428,7 @@ function buildFieldData(
   };
 
   if (mapping.body) {
-    fieldData[mapping.body] = contentToHtml(content);
+    fieldData[mapping.body] = paragraphsToHtml(content.body);
   }
 
   if (mapping.excerpt) {
@@ -416,11 +443,11 @@ function buildFieldData(
   return fieldData;
 }
 
-function isPlainTextField(field: WebflowField) {
+export function isPlainTextField(field: WebflowField) {
   return ["PlainText", "PlainTextField"].includes(field.type);
 }
 
-function getRequiredTextDefault(fieldSlug: string, content: GeneratedContentRecord, brand: BrandRecord) {
+export function getRequiredTextDefault(fieldSlug: string, content: GeneratedContentRecord, brand: BrandRecord) {
   const normalized = normalizeText(fieldSlug);
 
   if (normalized.includes("author")) {
@@ -434,24 +461,8 @@ function getRequiredTextDefault(fieldSlug: string, content: GeneratedContentReco
   return "SuppGo";
 }
 
-function buildExcerpt(body: string) {
-  return body.replace(/\s+/g, " ").trim().slice(0, 180);
-}
-
-function prettifyContentType(value: string) {
-  return value.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
 function buildDraftReviewLabel(action: "Created" | "Updated", content: GeneratedContentRecord, collectionName: string) {
   return `${action}: ${content.title ?? prettifyContentType(content.content_type)} in ${collectionName}`;
-}
-
-function normalizeText(value: string) {
-  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-}
-
-function slugify(value: string) {
-  return normalizeText(value).replace(/\s+/g, "-").slice(0, 80) || "suppgo-content";
 }
 
 function dedupeLinks(links: CmsDeploymentPreviewLink[]) {

@@ -3,11 +3,13 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { enforceSameOrigin } from "@/lib/security";
 import { deployCycleToWebflow } from "@/lib/webflow/cms-deployer";
+import { isDryRunAllowedInProduction } from "@/lib/webflow/adapter";
 import type { BrandRecord, GeneratedContentRecord } from "@/types";
 
 const deployCycleSchema = z.object({
   cycle_id: z.string().uuid("Invalid cycle ID."),
   provider: z.literal("webflow"),
+  dry_run: z.boolean().optional(),
 });
 
 export async function POST(request: Request) {
@@ -63,11 +65,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "No generated content is available for this cycle." }, { status: 400 });
   }
 
+  const dryRunRequested = parsed.data.dry_run === true;
+  const dryRunPermitted =
+    dryRunRequested && (process.env.NODE_ENV !== "production" || isDryRunAllowedInProduction());
+
   try {
     const run = await deployCycleToWebflow({
       brand: brand as BrandRecord,
       cycleId: parsed.data.cycle_id,
       content: content as GeneratedContentRecord[],
+      dryRun: dryRunPermitted,
     });
     return NextResponse.json({ ok: run.status !== "failed", deployment: run });
   } catch (err) {

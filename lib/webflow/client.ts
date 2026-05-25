@@ -1,4 +1,5 @@
 import "server-only";
+import { paragraphsToHtml } from "@/lib/text";
 import type { GeneratedContentRecord, WebflowSiteSummary } from "@/types";
 
 const WEBFLOW_API_BASE = "https://api.webflow.com/v2";
@@ -22,9 +23,9 @@ export interface WebflowCollection {
 export interface WebflowItem {
   id: string;
   fieldData: Record<string, unknown>;
-  isDraft: boolean;
-  isArchived: boolean;
-  lastPublished: string | null;
+  isDraft?: boolean;
+  isArchived?: boolean;
+  lastPublished?: string | null;
 }
 
 interface WebflowListSitesResponse {
@@ -148,18 +149,5 @@ export function buildWebflowDashboardUrl(siteId: string) {
 }
 
 export function contentToHtml(content: GeneratedContentRecord) {
-  return content.body
-    .split(/\n{2,}/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean)
-    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br />")}</p>`)
-    .join("\n");
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+  return paragraphsToHtml(content.body);
 }
