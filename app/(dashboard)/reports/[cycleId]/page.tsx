@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { CategoryPerformanceChart } from "@/components/dashboard/CategoryPerformanceChart";
+import { CmsDeployButton } from "@/components/dashboard/CmsDeployButton";
 import { CopyButton } from "@/components/dashboard/CopyButton";
 import { GitHubDeployButton } from "@/components/dashboard/GitHubDeployButton";
 import { PromptResultsTable } from "@/components/dashboard/PromptResultsTable";
@@ -9,7 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { getCycleReportData } from "@/lib/dashboard";
 import { formatRoundedValue, formatSignedRoundedValue } from "@/lib/formatting";
-import { getPublishTargetStatus } from "@/lib/integrations";
+import { getPublishTargetStatus, getWebflowIntegrationStatus } from "@/lib/integrations";
 import { getGeneratedContentDisplay } from "@/lib/suppgo";
 
 function formatDelta(value: number | null) {
@@ -32,7 +33,9 @@ export default async function CycleReportPage({
   }
 
   const siteSignals = report.latestSiteAnalysis?.content_signals;
+  const webflowIntegration = await getWebflowIntegrationStatus(report.brand.id);
   const publishTarget = await getPublishTargetStatus(report.brand.id);
+  const dryRunFallback = !webflowIntegration.connected && process.env.SUPPGO_TEST_MODE === "true";
   const detectedSignals = Array.from(
     new Set([...(siteSignals?.productNames ?? []), ...(siteSignals?.ingredients ?? [])].map((item) => item.trim())),
   )
@@ -81,6 +84,12 @@ export default async function CycleReportPage({
               </InfoHint>
             </div>
           </div>
+          <CmsDeployButton
+            cycleId={report.cycle.id}
+            connected={webflowIntegration.connected || dryRunFallback}
+            siteName={webflowIntegration.site_name}
+            dryRun={dryRunFallback}
+          />
         </div>
         <div className="mt-6">
           {report.generatedContent.length > 0 ? (

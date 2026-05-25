@@ -67,6 +67,7 @@ export function OnboardingWizard({ initialBrand, initialAnalysis }: OnboardingWi
     industryTags: initialBrand?.industry_tags ?? [],
     competitorUrls: getInitialCompetitors(initialBrand),
   });
+  const [brandAliasesText, setBrandAliasesText] = useState((initialBrand?.brand_aliases ?? []).join("\n"));
   const [savedProfile, setSavedProfile] = useState<ProfilePayload | null>(
     initialBrand
       ? {
@@ -106,14 +107,15 @@ export function OnboardingWizard({ initialBrand, initialAnalysis }: OnboardingWi
       return true;
     }
 
-    return JSON.stringify(savedProfile) !== JSON.stringify(profile);
-  }, [profile, savedProfile]);
+    return JSON.stringify(savedProfile) !== JSON.stringify({ ...profile, brandAliases: parseAliasInput(brandAliasesText) });
+  }, [brandAliasesText, profile, savedProfile]);
 
   async function saveProfile() {
     setSavingProfile(true);
     setError(null);
 
     const competitorUrls = profile.competitorUrls.map((value) => value.trim()).filter(Boolean);
+    const brandAliases = parseAliasInput(brandAliasesText);
 
     const response = await fetch("/api/onboarding/profile", {
       method: "POST",
@@ -122,7 +124,7 @@ export function OnboardingWizard({ initialBrand, initialAnalysis }: OnboardingWi
       },
       body: JSON.stringify({
         brandName: profile.brandName.trim(),
-        brandAliases: profile.brandAliases,
+        brandAliases,
         websiteUrl: profile.websiteUrl.trim(),
         industryTags: profile.industryTags,
         competitorUrls,
@@ -140,6 +142,7 @@ export function OnboardingWizard({ initialBrand, initialAnalysis }: OnboardingWi
 
     const persistedProfile: ProfilePayload = {
       ...profile,
+      brandAliases,
       competitorUrls: getInitialCompetitors({ competitor_urls: competitorUrls }),
     };
 
@@ -178,12 +181,17 @@ export function OnboardingWizard({ initialBrand, initialAnalysis }: OnboardingWi
     }
 
     const analysisRecord = result.analysis;
+    const mergedAliases = mergeAliases(
+      parseAliasInput(brandAliasesText),
+      analysisRecord.content_signals?.brandAliases ?? [],
+    );
 
     setAnalysis(analysisRecord);
     setProfile((current) => ({
       ...current,
-      brandAliases: mergeAliases(current.brandAliases, analysisRecord.content_signals?.brandAliases ?? []),
+      brandAliases: mergedAliases,
     }));
+    setBrandAliasesText(mergedAliases.join("\n"));
   }
 
   async function startTrial() {
@@ -310,13 +318,8 @@ export function OnboardingWizard({ initialBrand, initialAnalysis }: OnboardingWi
                   <textarea
                     id="brandAliases"
                     rows={4}
-                    value={profile.brandAliases.join("\n")}
-                    onChange={(event) =>
-                      setProfile((current) => ({
-                        ...current,
-                        brandAliases: parseAliasInput(event.target.value),
-                      }))
-                    }
+                    value={brandAliasesText}
+                    onChange={(event) => setBrandAliasesText(event.target.value)}
                     placeholder={"Athletic Greens\nAG1 Daily"}
                     className="w-full rounded-card border border-sage/20 bg-white px-4 py-3 text-dark outline-none transition-colors duration-200 focus:border-sage"
                   />
@@ -604,17 +607,20 @@ export function OnboardingWizard({ initialBrand, initialAnalysis }: OnboardingWi
                     </span>
                   </a>
 
-                  <div className="flex flex-col gap-3 rounded-card border border-sage/10 bg-white/60 p-5 text-left opacity-60">
+                  <a
+                    href="/api/integrations/webflow/authorize?from=onboarding"
+                    className="flex flex-col gap-3 rounded-card border border-sage/20 bg-white p-5 text-left transition hover:border-sage hover:bg-sage/5"
+                  >
                     <div className="text-2xl">◈</div>
-                    <div className="font-medium text-dark">Headless CMS</div>
+                    <div className="font-medium text-dark">Webflow CMS</div>
                     <p className="text-sm leading-6 text-mid">
-                      Webflow, Contentful, Sanity, or Shopify. SuppGo creates draft entries in
-                      your CMS after each cycle.
+                      Best for marketing-owned sites. SuppGo creates draft CMS updates from each
+                      cycle so your team can preview before publishing.
                     </p>
-                    <span className="mt-auto inline-block rounded-pill bg-sage/10 px-3 py-1 text-xs font-medium text-mid">
-                      Coming soon
+                    <span className="mt-auto inline-block rounded-pill bg-sage/10 px-3 py-1 text-xs font-medium text-sage">
+                      Connect Webflow →
                     </span>
-                  </div>
+                  </a>
 
                   <button
                     type="button"
@@ -651,7 +657,7 @@ export function OnboardingWizard({ initialBrand, initialAnalysis }: OnboardingWi
               <p>Step 1 creates or updates the single brand record tied to your user.</p>
               <p>Step 2 stores a site analysis snapshot that future cycles can build from.</p>
               <p>Step 3 starts your trial with the full product (all models and features).</p>
-              <p>Step 4 optionally connects GitHub so content flows directly into your site as a PR.</p>
+              <p>Step 4 optionally connects GitHub or Webflow so content flows directly into your site.</p>
             </div>
           </Card>
 
@@ -670,7 +676,7 @@ export function OnboardingWizard({ initialBrand, initialAnalysis }: OnboardingWi
               </div>
               <div>
                 <div className="font-medium text-dark">Aliases</div>
-                <div>{profile.brandAliases.join(", ") || "None added yet"}</div>
+                <div>{parseAliasInput(brandAliasesText).join(", ") || "None added yet"}</div>
               </div>
               <div>
                 <div className="font-medium text-dark">Access</div>

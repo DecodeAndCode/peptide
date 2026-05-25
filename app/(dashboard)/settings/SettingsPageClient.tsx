@@ -3,11 +3,17 @@
 import { useState, useTransition, useEffect } from "react";
 import { Card } from "@/components/ui/Card";
 import { INDUSTRY_OPTIONS, SUBSCRIPTION_PLANS } from "@/lib/suppgo";
-import type { BrandRecord, GitHubIntegrationStatus } from "@/types";
+import type {
+  BrandRecord,
+  GitHubIntegrationStatus,
+  WebflowIntegrationStatus,
+  WebflowSiteSummary,
+} from "@/types";
 
 interface SettingsPageClientProps {
   brand: BrandRecord;
   githubIntegration: GitHubIntegrationStatus;
+  webflowIntegration: WebflowIntegrationStatus;
 }
 
 function parseAliasInput(value: string) {
@@ -25,7 +31,7 @@ function getInitialCompetitors(competitorUrls: string[]) {
   return [...competitorUrls, ...Array.from({ length: Math.max(0, 5 - competitorUrls.length) }, () => "")].slice(0, 5);
 }
 
-export function SettingsPageClient({ brand, githubIntegration }: SettingsPageClientProps) {
+export function SettingsPageClient({ brand, githubIntegration, webflowIntegration }: SettingsPageClientProps) {
   const [brandName, setBrandName] = useState(brand.brand_name);
   const [websiteUrl, setWebsiteUrl] = useState(brand.website_url);
   const [brandAliasesText, setBrandAliasesText] = useState((brand.brand_aliases ?? []).join(", "));
@@ -44,6 +50,15 @@ export function SettingsPageClient({ brand, githubIntegration }: SettingsPageCli
   const [loadingRepos, setLoadingRepos] = useState(false);
   const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
+  // Webflow integration state
+  const [webflow, setWebflow] = useState<WebflowIntegrationStatus>(webflowIntegration);
+  const [webflowMessage, setWebflowMessage] = useState<string | null>(null);
+  const [webflowSites, setWebflowSites] = useState<WebflowSiteSummary[]>([]);
+  const [selectedWebflowSiteId, setSelectedWebflowSiteId] = useState(webflowIntegration.site_id ?? "");
+  const [loadingWebflowSites, setLoadingWebflowSites] = useState(false);
+  const [isWebflowPending, startWebflowTransition] = useTransition();
+  const [confirmWebflowDisconnect, setConfirmWebflowDisconnect] = useState(false);
+
   // Show success message if redirected back from GitHub OAuth
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -54,6 +69,14 @@ export function SettingsPageClient({ brand, githubIntegration }: SettingsPageCli
     }
     if (params.get("error")?.startsWith("github_")) {
       setGithubMessage("GitHub connection failed. Please try again.");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    if (params.get("webflow") === "connected") {
+      setWebflowMessage("Webflow connected. SuppGO will auto-detect the best CMS site and collections.");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    if (params.get("error")?.startsWith("webflow_")) {
+      setWebflowMessage("Webflow connection failed. Please try again.");
       window.history.replaceState({}, "", window.location.pathname);
     }
   }, []);
@@ -113,6 +136,75 @@ export function SettingsPageClient({ brand, githubIntegration }: SettingsPageCli
     });
   }
 
+  async function loadWebflowSites() {
+    setLoadingWebflowSites(true);
+    setWebflowMessage(null);
+    const res = await fetch("/api/integrations/webflow/sites");
+    const data = (await res.json().catch(() => null)) as {
+      sites?: WebflowSiteSummary[];
+      error?: string;
+    } | null;
+    setLoadingWebflowSites(false);
+
+    if (!res.ok || !data?.sites) {
+      setWebflowMessage(data?.error ?? "Failed to load Webflow sites.");
+      return;
+    }
+
+    setWebflowSites(data.sites);
+    if (!selectedWebflowSiteId && data.sites[0]) {
+      setSelectedWebflowSiteId(data.sites[0].id);
+    }
+  }
+
+  function handleSaveWebflowSite() {
+    const site = webflowSites.find((candidate) => candidate.id === selectedWebflowSiteId);
+    if (!site) {
+      setWebflowMessage("Select a Webflow site first.");
+      return;
+    }
+
+    startWebflowTransition(async () => {
+      const res = await fetch("/api/integrations/webflow/sites", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          site_id: site.id,
+          site_name: site.displayName,
+          preview_url: site.previewUrl,
+        }),
+      });
+      const data = (await res.json().catch(() => null)) as { error?: string } | null;
+      if (!res.ok) {
+        setWebflowMessage(data?.error ?? "Failed to save Webflow site.");
+        return;
+      }
+      setWebflow({
+        connected: true,
+        site_id: site.id,
+        site_name: site.displayName,
+        preview_url: site.previewUrl,
+        status: "active",
+      });
+      setWebflowMessage("Webflow site saved. CMS deployment will auto-select collections and fields.");
+    });
+  }
+
+  function handleDisconnectWebflow() {
+    setWebflowMessage(null);
+    setConfirmWebflowDisconnect(false);
+    startWebflowTransition(async () => {
+      const res = await fetch("/api/integrations/webflow/disconnect", { method: "DELETE" });
+      if (!res.ok) {
+        setWebflowMessage("Failed to disconnect Webflow.");
+        return;
+      }
+      setWebflow({ connected: false, site_id: null, site_name: null, preview_url: null, status: "disconnected" });
+      setSelectedWebflowSiteId("");
+      setWebflowSites([]);
+    });
+  }
+
   function toggleIndustry(value: string) {
     setIndustryTags((current) =>
       current.includes(value) ? current.filter((item) => item !== value) : [...current, value],
@@ -150,7 +242,7 @@ export function SettingsPageClient({ brand, githubIntegration }: SettingsPageCli
 
   return (
     <div className="space-y-6">
-      <Card className="p-6 md:p-8">
+      <Card id="integrations" className="p-6 md:p-8">
         <div className="text-xs font-medium uppercase tracking-[1.6px] text-sage">Settings</div>
         <h2 className="mt-2 font-display text-3xl text-dark">Brand profile and billing</h2>
         <p className="mt-4 max-w-3xl text-sm leading-7 text-mid">
@@ -455,14 +547,132 @@ export function SettingsPageClient({ brand, githubIntegration }: SettingsPageCli
           ) : null}
         </div>
 
+        <div className="mt-4 rounded-card border border-sage/15 bg-white p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-card border border-sage/20 bg-sage/5 text-sm font-bold text-dark">
+                WF
+              </div>
+              <div>
+                <div className="font-medium text-dark">Webflow CMS</div>
+                <div className="mt-0.5 text-xs text-mid">
+                  {webflow.connected
+                    ? webflow.site_name
+                      ? `Connected — ${webflow.site_name}`
+                      : "Connected — auto-detecting site"
+                    : "Create draft CMS updates with one click"}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {webflow.connected ? (
+                <>
+                  <span className="inline-block rounded-full bg-sage/10 px-2.5 py-1 text-xs font-medium text-sage">
+                    Active
+                  </span>
+                  {confirmWebflowDisconnect ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-mid">Disconnect?</span>
+                      <button
+                        type="button"
+                        onClick={handleDisconnectWebflow}
+                        disabled={isWebflowPending}
+                        className="rounded-card border border-accent/30 px-3 py-1 text-xs font-medium text-accent transition hover:bg-accent/10 disabled:opacity-60"
+                      >
+                        {isWebflowPending ? "..." : "Confirm"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmWebflowDisconnect(false)}
+                        className="rounded-card border border-sage/20 px-3 py-1 text-xs text-mid transition hover:border-sage/40"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmWebflowDisconnect(true)}
+                      className="rounded-card border border-sage/20 px-3 py-1 text-xs text-mid transition hover:border-sage/40"
+                    >
+                      Disconnect
+                    </button>
+                  )}
+                </>
+              ) : (
+                <a
+                  href="/api/integrations/webflow/authorize?from=settings"
+                  className="btn-primary px-4 py-2 text-sm"
+                >
+                  Connect Webflow
+                </a>
+              )}
+            </div>
+          </div>
+
+          {webflowMessage ? <p className="mt-4 text-sm text-mid">{webflowMessage}</p> : null}
+
+          {webflow.connected ? (
+            <div className="mt-5 space-y-4 border-t border-sage/10 pt-5">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-dark">Webflow site</label>
+                <div className="flex gap-2">
+                  {webflowSites.length > 0 ? (
+                    <select
+                      value={selectedWebflowSiteId}
+                      onChange={(event) => setSelectedWebflowSiteId(event.target.value)}
+                      className="flex-1 rounded-card border border-sage/20 bg-white px-4 py-2.5 text-sm text-dark outline-none transition-colors duration-200 focus:border-sage"
+                    >
+                      {webflowSites.map((site) => (
+                        <option key={site.id} value={site.id}>
+                          {site.displayName}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="flex-1 rounded-card border border-sage/15 bg-sage/5 px-4 py-2.5 text-sm text-mid">
+                      {webflow.site_name ?? "SuppGO will auto-select the first available Webflow site."}
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void loadWebflowSites()}
+                    disabled={loadingWebflowSites}
+                    className="rounded-card border border-sage/20 px-3 py-2.5 text-xs text-mid transition hover:border-sage/40 disabled:opacity-60"
+                  >
+                    {loadingWebflowSites ? "Loading…" : "Browse"}
+                  </button>
+                </div>
+                <p className="text-xs text-mid">
+                  SuppGO auto-detects CMS collections and fields when applying report updates.
+                </p>
+              </div>
+
+              {webflowSites.length > 0 ? (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleSaveWebflowSite}
+                    disabled={isWebflowPending}
+                    className="btn-primary px-5 py-2.5 disabled:opacity-60"
+                  >
+                    {isWebflowPending ? "Saving…" : "Save Webflow site"}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+
         <div className="mt-4 rounded-card border border-sage/10 bg-white/60 p-5 opacity-60">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-card border border-sage/20 bg-sage/5 text-sm font-bold text-dark">
               CMS
             </div>
             <div>
-              <div className="font-medium text-dark">Headless CMS</div>
-              <div className="mt-0.5 text-xs text-mid">Webflow, Contentful, Sanity, Shopify — coming soon</div>
+              <div className="font-medium text-dark">More CMS providers</div>
+              <div className="mt-0.5 text-xs text-mid">Contentful, Sanity, Shopify — coming next</div>
             </div>
           </div>
         </div>
