@@ -225,24 +225,36 @@ function buildRecommendations({
   return recommendations.slice(0, 5);
 }
 
+const BROWSER_USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
 async function fetchText(url: string) {
   const response = await fetch(url, {
     headers: {
-      "user-agent":
-        "SuppGoBot/1.0 (+https://suppgo.local) Next.js onboarding crawler",
+      "user-agent": BROWSER_USER_AGENT,
+      accept:
+        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+      "accept-language": "en-US,en;q=0.9",
     },
+    redirect: "follow",
     cache: "no-store",
   });
 
   if (!response.ok) {
-    throw new Error(`Request failed for ${url}`);
+    throw new Error(`Request failed for ${url} (status ${response.status})`);
   }
 
   return response.text();
 }
 
 async function collectPages(baseUrl: string) {
-  const homepageHtml = await fetchText(baseUrl);
+  let homepageHtml: string;
+  try {
+    homepageHtml = await fetchText(baseUrl);
+  } catch (err) {
+    console.warn(`[site-crawler] homepage fetch failed for ${baseUrl}:`, err);
+    return [];
+  }
   const homepage: CrawledPage = { url: baseUrl, html: homepageHtml };
   const $ = cheerio.load(homepageHtml);
   const rootHost = new URL(baseUrl).host;
@@ -318,6 +330,12 @@ export async function analyzeSite(
     missingContentGaps,
     contentSignals,
   });
+
+  if (pages.length === 0) {
+    recommendations.unshift(
+      "We couldn't crawl your site — bot protection (e.g. Cloudflare, PerimeterX) is blocking automated requests. Allowlist SuppGO's crawler or publish an `/llms.txt` file so models can still discover your brand.",
+    );
+  }
 
   return {
     pagesAnalyzed: pages.length,

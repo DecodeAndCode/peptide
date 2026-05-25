@@ -71,6 +71,7 @@ export async function POST(request: Request) {
       .single();
 
     if (error || !data) {
+      console.error("[analyze-site] supabase insert failed:", error);
       return NextResponse.json({ error: "Unable to store site analysis." }, { status: 500 });
     }
 
@@ -84,7 +85,8 @@ export async function POST(request: Request) {
       },
       analysis: data,
     });
-  } catch {
+  } catch (err) {
+    console.error("[analyze-site] analyzeSite threw:", err);
     return NextResponse.json(
       { error: "We couldn't analyze the site right now. Please retry in a moment." },
       { status: 500 },
