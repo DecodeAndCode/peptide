@@ -35,6 +35,7 @@ export default async function DashboardPage() {
 
   const hasGitHub = githubIntegration.connected && !!githubIntegration.repo_full_name;
   const hasWebflow = webflowIntegration.connected;
+  const dryRunFallback = !hasWebflow && process.env.SUPPGO_TEST_MODE === "true";
 
   return (
     <div className="space-y-6">
@@ -273,8 +274,9 @@ export default async function DashboardPage() {
           {overview.latestCompletedCycle ? (
             <CmsDeployButton
               cycleId={overview.latestCompletedCycle.id}
-              connected={hasWebflow}
+              connected={hasWebflow || dryRunFallback}
               siteName={webflowIntegration.site_name}
+              dryRun={dryRunFallback}
             />
           ) : null}
           {!hasGitHub ? (

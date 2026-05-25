@@ -144,8 +144,11 @@ export async function updateWebflowDraftItem(opts: {
   );
 }
 
-export function buildWebflowDashboardUrl(siteId: string) {
-  return `https://webflow.com/dashboard/sites/${siteId}`;
+export function buildWebflowDashboardUrl(shortName: string | null) {
+  if (!shortName) {
+    return "https://webflow.com/dashboard";
+  }
+  return `https://${shortName}.design.webflow.com/?cms`;
 }
 
 export function contentToHtml(content: GeneratedContentRecord) {

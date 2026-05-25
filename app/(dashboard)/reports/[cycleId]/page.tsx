@@ -35,6 +35,7 @@ export default async function CycleReportPage({
   const siteSignals = report.latestSiteAnalysis?.content_signals;
   const webflowIntegration = await getWebflowIntegrationStatus(report.brand.id);
   const publishTarget = await getPublishTargetStatus(report.brand.id);
+  const dryRunFallback = !webflowIntegration.connected && process.env.SUPPGO_TEST_MODE === "true";
   const detectedSignals = Array.from(
     new Set([...(siteSignals?.productNames ?? []), ...(siteSignals?.ingredients ?? [])].map((item) => item.trim())),
   )
@@ -85,8 +86,9 @@ export default async function CycleReportPage({
           </div>
           <CmsDeployButton
             cycleId={report.cycle.id}
-            connected={webflowIntegration.connected}
+            connected={webflowIntegration.connected || dryRunFallback}
             siteName={webflowIntegration.site_name}
+            dryRun={dryRunFallback}
           />
         </div>
         <div className="mt-6">

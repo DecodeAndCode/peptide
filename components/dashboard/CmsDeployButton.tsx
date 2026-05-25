@@ -7,6 +7,7 @@ interface CmsDeployButtonProps {
   cycleId: string;
   connected: boolean;
   siteName: string | null;
+  dryRun?: boolean;
 }
 
 interface CmsDeploymentResult {
@@ -30,7 +31,7 @@ const PROGRESS_MESSAGES = [
   "Preparing preview links…",
 ];
 
-export function CmsDeployButton({ cycleId, connected, siteName }: CmsDeployButtonProps) {
+export function CmsDeployButton({ cycleId, connected, siteName, dryRun = false }: CmsDeployButtonProps) {
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [messageIndex, setMessageIndex] = useState(0);
   const [result, setResult] = useState<CmsDeploymentResult["deployment"] | null>(null);
@@ -48,16 +49,12 @@ export function CmsDeployButton({ cycleId, connected, siteName }: CmsDeployButto
     return result?.preview_links.find((link) => link.type === "webflow_dashboard") ?? result?.preview_links[0] ?? null;
   }, [result]);
 
-  const publishedPreviewLink = useMemo(() => {
-    return result?.preview_links.find((link) => link.type === "site_preview") ?? null;
-  }, [result]);
-
   const reviewItems = useMemo(() => {
     return result?.preview_links.filter((link) => link.type === "cms_item") ?? [];
   }, [result]);
 
   async function handleDeploy() {
-    if (!connected) return;
+    if (!connected && !dryRun) return;
 
     setState("loading");
     setResult(null);
@@ -67,7 +64,7 @@ export function CmsDeployButton({ cycleId, connected, siteName }: CmsDeployButto
     const res = await fetch("/api/integrations/cms/deploy-cycle", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cycle_id: cycleId, provider: "webflow" }),
+      body: JSON.stringify({ cycle_id: cycleId, provider: "webflow", ...(dryRun ? { dry_run: true } : {}) }),
     });
 
     const data = (await res.json().catch(() => null)) as CmsDeploymentResult | null;
@@ -83,7 +80,7 @@ export function CmsDeployButton({ cycleId, connected, siteName }: CmsDeployButto
     setErrorMessage(data.deployment.error_message);
   }
 
-  if (!connected) {
+  if (!connected && !dryRun) {
     return (
       <a href="/settings" className="btn-outline px-5 py-2.5 text-sm">
         Connect Webflow CMS
@@ -94,6 +91,11 @@ export function CmsDeployButton({ cycleId, connected, siteName }: CmsDeployButto
   if (state === "done" && result) {
     return (
       <div className="rounded-card border border-sage/15 bg-sage/5 p-4">
+        {dryRun ? (
+          <div className="mb-3 rounded-card border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
+            Dry run — drafts were simulated with in-memory fixtures. Nothing was sent to Webflow.
+          </div>
+        ) : null}
         <div className="text-sm font-medium text-dark">CMS drafts ready{siteName ? ` in ${siteName}` : ""}</div>
         <p className="mt-2 text-xs leading-6 text-mid">
           Created {result.created_count}, updated {result.updated_count}, skipped {result.skipped_count}. Review the
@@ -102,17 +104,7 @@ export function CmsDeployButton({ cycleId, connected, siteName }: CmsDeployButto
         <div className="mt-3 flex flex-wrap gap-2">
           {primaryLink ? (
             <a href={primaryLink.url} target="_blank" rel="noreferrer" className="btn-primary px-4 py-2 text-xs">
-              Open Webflow dashboard
-            </a>
-          ) : null}
-          {publishedPreviewLink ? (
-            <a
-              href={publishedPreviewLink.url}
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-card border border-sage/20 px-3 py-2 text-xs text-mid transition hover:border-sage/40"
-            >
-              Open published site preview
+              Open Webflow Designer (CMS)
             </a>
           ) : null}
           <button
@@ -165,9 +157,17 @@ export function CmsDeployButton({ cycleId, connected, siteName }: CmsDeployButto
       type="button"
       onClick={() => void handleDeploy()}
       disabled={state === "loading"}
-      className="btn-primary px-5 py-2.5 text-sm disabled:cursor-not-allowed disabled:opacity-70"
+      className={`${
+        dryRun
+          ? "rounded-card border border-amber-400 bg-amber-100 px-5 py-2.5 text-sm font-medium text-amber-900 hover:bg-amber-200"
+          : "btn-primary px-5 py-2.5 text-sm"
+      } disabled:cursor-not-allowed disabled:opacity-70`}
     >
-      {state === "loading" ? PROGRESS_MESSAGES[messageIndex] : "Apply CMS updates"}
+      {state === "loading"
+        ? PROGRESS_MESSAGES[messageIndex]
+        : dryRun
+          ? "Try CMS deploy (dry run)"
+          : "Apply CMS updates"}
     </button>
   );
 }

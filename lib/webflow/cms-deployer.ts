@@ -89,12 +89,6 @@ export async function deployCycleToWebflow(opts: DeployCycleOptions): Promise<Cm
   let updatedCount = 0;
   let skippedCount = 0;
 
-  if (dryRun) {
-    warnings.push(
-      "DRY RUN — no real Webflow calls were made. Drafts were simulated with in-memory fixtures.",
-    );
-  }
-
   try {
     const site = await resolveWebflowSite({
       adapter,
@@ -103,24 +97,12 @@ export async function deployCycleToWebflow(opts: DeployCycleOptions): Promise<Cm
       persistSiteConfig,
     });
 
-    warnings.push(
-      "Webflow changes are saved as drafts. New draft CMS items may not appear on the published site preview until they are reviewed and published in Webflow.",
-    );
-
-    const dashboardUrl = buildWebflowDashboardUrl(site.id);
+    const dashboardUrl = buildWebflowDashboardUrl(site.shortName);
     previewLinks.push({
-      label: "Open Webflow dashboard",
+      label: "Open Webflow Designer (CMS)",
       url: dashboardUrl,
       type: "webflow_dashboard",
     });
-
-    if (site.previewUrl) {
-      previewLinks.push({
-        label: "Open published site preview",
-        url: site.previewUrl,
-        type: "site_preview",
-      });
-    }
 
     const collections = await adapter.listCollections(site.id);
     const contentToDeploy = opts.content.filter((item) => item.content_type !== "llms_txt");
@@ -235,8 +217,21 @@ export async function deployCycleToWebflow(opts: DeployCycleOptions): Promise<Cm
           : "completed"
         : "failed";
 
-    if (status === "failed" && warnings.length === 0) {
-      warnings.push("No Webflow CMS drafts were created.");
+    const errorMessage =
+      status === "failed"
+        ? warnings[0] ??
+          "No Webflow CMS drafts were created. Make sure your Webflow site has at least one Collection that matches the generated content."
+        : null;
+
+    if (status !== "failed") {
+      warnings.unshift(
+        "Webflow changes are saved as drafts. Review and publish them in the Webflow CMS before they appear on the live site.",
+      );
+      if (dryRun) {
+        warnings.unshift(
+          "DRY RUN — no real Webflow calls were made. Drafts were simulated with in-memory fixtures.",
+        );
+      }
     }
 
     return await updateCmsDeploymentRun(run.id, {
@@ -246,7 +241,7 @@ export async function deployCycleToWebflow(opts: DeployCycleOptions): Promise<Cm
       skippedCount,
       previewLinks: dedupeLinks(previewLinks),
       warnings,
-      errorMessage: status === "failed" ? warnings[0] ?? "CMS deployment failed." : null,
+      errorMessage,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Webflow CMS deployment failed.";

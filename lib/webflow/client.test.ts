@@ -183,8 +183,12 @@ describe("updateWebflowDraftItem", () => {
 });
 
 describe("buildWebflowDashboardUrl", () => {
-  it("returns canonical dashboard URL", () => {
-    expect(buildWebflowDashboardUrl("site-123")).toBe("https://webflow.com/dashboard/sites/site-123");
+  it("returns Designer CMS deep link for a known site shortName", () => {
+    expect(buildWebflowDashboardUrl("alpha")).toBe("https://alpha.design.webflow.com/?cms");
+  });
+
+  it("falls back to workspace dashboard when shortName is null", () => {
+    expect(buildWebflowDashboardUrl(null)).toBe("https://webflow.com/dashboard");
   });
 });
 
