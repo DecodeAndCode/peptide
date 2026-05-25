@@ -11,7 +11,7 @@ import {
 } from "@react-pdf/renderer";
 import type { CycleReportData } from "@/lib/dashboard";
 import { formatRoundedValue, formatSignedRoundedValue } from "@/lib/formatting";
-import { PROMPT_CATEGORY_LABELS } from "@/lib/suppgo";
+import { getGeneratedContentDisplay, PROMPT_CATEGORY_LABELS } from "@/lib/suppgo";
 
 const styles = StyleSheet.create({
   page: {
@@ -116,6 +116,12 @@ const styles = StyleSheet.create({
     textDecoration: "none",
     marginBottom: 2,
   },
+  draftTypeRationale: {
+    color: "#4a5c50",
+    fontSize: 9,
+    marginBottom: 6,
+    lineHeight: 1.35,
+  },
 });
 
 function PdfReport({ data }: { data: CycleReportData }) {
@@ -203,12 +209,17 @@ function PdfReport({ data }: { data: CycleReportData }) {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>5. Generated Content Recommendations</Text>
-          {data.generatedContent.slice(0, 4).map((item) => (
-            <View key={item.id} style={{ marginBottom: 10 }}>
-              <Text style={styles.appendixTitle}>{item.title ?? item.content_type}</Text>
-              <Text>{item.body}</Text>
-            </View>
-          ))}
+          {data.generatedContent.slice(0, 4).map((item) => {
+            const draft = getGeneratedContentDisplay(item.content_type);
+            return (
+              <View key={item.id} style={{ marginBottom: 10 }}>
+                <Text style={styles.appendixTitle}>{draft.label}</Text>
+                <Text style={styles.draftTypeRationale}>{draft.rationale}</Text>
+                <Text style={styles.appendixTitle}>{item.title ?? "Untitled draft"}</Text>
+                <Text>{item.body}</Text>
+              </View>
+            );
+          })}
         </View>
 
         <View style={styles.section}>

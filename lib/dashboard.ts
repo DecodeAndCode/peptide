@@ -383,7 +383,15 @@ function getInfluencerPreview(matches: InfluencerMatchRecord[]) {
     ];
   }
 
-  return matches.slice(0, 3).map((match) => ({
+  const ranked = [...matches].sort((left, right) => {
+    const fitDelta = (right.fit_score ?? 0) - (left.fit_score ?? 0);
+    if (fitDelta !== 0) {
+      return fitDelta;
+    }
+    return (right.verification_confidence ?? 0) - (left.verification_confidence ?? 0);
+  });
+
+  return ranked.slice(0, 3).map((match) => ({
     title: `${match.platform === "instagram" ? "Instagram" : "TikTok"} @${match.handle}`,
     description: match.match_reason ?? "Brand-fit rationale will appear here after scoring completes.",
     href: "/influencers",
@@ -483,12 +491,18 @@ function getExecutiveSummary(
     .filter((prompt) => !prompt.brand_mentioned)
     .sort((left, right) => (right.competitors_mentioned?.length ?? 0) - (left.competitors_mentioned?.length ?? 0));
 
+  // A prompt can appear across multiple models — the same prompt_text may win on
+  // one model and miss on another. Ensure the two headlines always reference
+  // distinct prompt texts so the summary is never self-contradictory.
+  const topWinText = wins[0]?.prompt_text ?? null;
   const topWin =
-    wins[0]?.prompt_text ??
+    topWinText ??
     "Your first cycle will surface the strongest prompt patterns once more data has accumulated.";
-  const topMiss =
+  const topMissText =
+    misses.find((miss) => miss.prompt_text !== topWinText)?.prompt_text ??
     misses[0]?.prompt_text ??
-    "No major misses were recorded in this cycle.";
+    null;
+  const topMiss = topMissText ?? "No major misses were recorded in this cycle.";
 
   return {
     visibilityScore,
@@ -504,7 +518,8 @@ function getExecutiveSummary(
   };
 }
 
-async function getCurrentBrandContext() {
+async function getCurrentBrandContext(options?: { includeHistoricalMetrics?: boolean }) {
+  const includeHistoricalMetrics = options?.includeHistoricalMetrics ?? true;
   const supabase = createClient();
   const {
     data: { user },
@@ -560,27 +575,33 @@ async function getCurrentBrandContext() {
   const completedCycles = cycles ?? [];
   const latestCompletedCycle = completedCycles.at(-1) ?? null;
   const previousCompletedCycle = completedCycles.length > 1 ? completedCycles.at(-2) ?? null : null;
-  const completedCycleIds = completedCycles.map((cycle) => cycle.id);
+  let prompts: PromptRecord[] = [];
+  let generatedContent: GeneratedContentRecord[] = [];
 
-  const [{ data: prompts }, { data: generatedContent }] = await Promise.all([
-    completedCycleIds.length > 0
-      ? supabase
-          .from("prompts")
-          .select("*")
-          .in("cycle_id", completedCycleIds)
-          .order("created_at", { ascending: true })
-          .returns<PromptRecord[]>()
-      : Promise.resolve({ data: [] as PromptRecord[] }),
-    latestCompletedCycle
-      ? supabase
-          .from("generated_content")
-          .select("*")
-          .eq("brand_id", brand.id)
-          .eq("cycle_id", latestCompletedCycle.id)
-          .order("created_at", { ascending: true })
-          .returns<GeneratedContentRecord[]>()
-      : Promise.resolve({ data: [] as GeneratedContentRecord[] }),
-  ]);
+  if (includeHistoricalMetrics) {
+    const completedCycleIds = completedCycles.map((cycle) => cycle.id);
+    const [{ data: promptData }, { data: generatedContentData }] = await Promise.all([
+      completedCycleIds.length > 0
+        ? supabase
+            .from("prompts")
+            .select("*")
+            .in("cycle_id", completedCycleIds)
+            .order("created_at", { ascending: true })
+            .returns<PromptRecord[]>()
+        : Promise.resolve({ data: [] as PromptRecord[] }),
+      latestCompletedCycle
+        ? supabase
+            .from("generated_content")
+            .select("*")
+            .eq("brand_id", brand.id)
+            .eq("cycle_id", latestCompletedCycle.id)
+            .order("created_at", { ascending: true })
+            .returns<GeneratedContentRecord[]>()
+        : Promise.resolve({ data: [] as GeneratedContentRecord[] }),
+    ]);
+    prompts = promptData ?? [];
+    generatedContent = generatedContentData ?? [];
+  }
 
   return {
     brand,
@@ -589,8 +610,8 @@ async function getCurrentBrandContext() {
     completedCycles,
     latestCompletedCycle,
     previousCompletedCycle,
-    prompts: prompts ?? [],
-    generatedContent: generatedContent ?? [],
+    prompts,
+    generatedContent,
     reports: reports ?? [],
   };
 }
@@ -642,7 +663,7 @@ export const getDashboardOverview = cache(async (): Promise<DashboardOverviewDat
 });
 
 export const getReportsList = cache(async (): Promise<ReportListItem[] | null> => {
-  const context = await getCurrentBrandContext();
+  const context = await getCurrentBrandContext({ includeHistoricalMetrics: false });
 
   if (!context) {
     return null;
@@ -669,7 +690,7 @@ export const getReportsList = cache(async (): Promise<ReportListItem[] | null> =
 });
 
 export const getCycleReportData = cache(async (cycleId: string): Promise<CycleReportData | null> => {
-  const context = await getCurrentBrandContext();
+  const context = await getCurrentBrandContext({ includeHistoricalMetrics: false });
 
   if (!context) {
     return null;

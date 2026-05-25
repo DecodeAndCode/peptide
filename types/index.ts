@@ -4,6 +4,12 @@ export type CycleStatus = "pending" | "running" | "complete" | "failed";
 export type InfluencerPlatform = "instagram" | "tiktok";
 export type InfluencerFollowerRange = "micro_10k_50k" | "mid_50k_200k" | "macro_200k+";
 export type InfluencerVerificationStatus = "grounded" | "low_confidence";
+export type InfluencerOutreachStatus =
+  | "not_contacted"
+  | "contacted"
+  | "responded"
+  | "partnered"
+  | "archived";
 export type PromptCategory =
   | "explicit_recommendation"
   | "problem_solution"
@@ -108,6 +114,9 @@ export interface InfluencerMatchRecord {
   fit_score: number | null;
   verification_status: InfluencerVerificationStatus | null;
   verification_confidence: number | null;
+  outreach_status: InfluencerOutreachStatus | null;
+  outreach_notes: string | null;
+  last_outreach_at: string | null;
   shown_in_cycle: number[];
   created_at: string;
 }

@@ -3,15 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
-import { INDUSTRY_OPTIONS, SUBSCRIPTION_PLANS } from "@/lib/suppgo";
-import type { BrandRecord, SiteAnalysisRecord, SubscriptionTier } from "@/types";
+import { INDUSTRY_OPTIONS, DEFAULT_TRIAL_SUBSCRIPTION_TIER, SUBSCRIPTION_PLANS } from "@/lib/suppgo";
+import type { BrandRecord, SiteAnalysisRecord } from "@/types";
 
 type WizardStep = 1 | 2 | 3 | 4;
 
 interface OnboardingWizardProps {
   initialBrand: BrandRecord | null;
   initialAnalysis: SiteAnalysisRecord | null;
-  selectedPlan?: SubscriptionTier;
 }
 
 interface ProfilePayload {
@@ -38,14 +37,6 @@ const analysisMessages = [
   "Identifying missing content gaps against your selected subcategories.",
 ];
 
-function sanitizePlan(value?: string | null): SubscriptionTier {
-  if (value === "starter" || value === "growth" || value === "pro") {
-    return value;
-  }
-
-  return "growth";
-}
-
 function getInitialCompetitors(brand: Pick<BrandRecord, "competitor_urls"> | null) {
   const existing = brand?.competitor_urls ?? [];
   return [...existing, ...Array.from({ length: Math.max(0, 5 - existing.length) }, () => "")].slice(0, 5);
@@ -66,11 +57,7 @@ function mergeAliases(existing: string[], suggested: string[]) {
   return Array.from(new Set([...existing, ...suggested].map((value) => value.trim()).filter(Boolean))).slice(0, 12);
 }
 
-export function OnboardingWizard({
-  initialBrand,
-  initialAnalysis,
-  selectedPlan,
-}: OnboardingWizardProps) {
+export function OnboardingWizard({ initialBrand, initialAnalysis }: OnboardingWizardProps) {
   const router = useRouter();
   const [step, setStep] = useState<WizardStep>(1);
   const [profile, setProfile] = useState<ProfilePayload>({
@@ -94,14 +81,12 @@ export function OnboardingWizard({
   );
   const [analysis, setAnalysis] = useState<SiteAnalysisRecord | null>(initialAnalysis);
   const [analysisMessageIndex, setAnalysisMessageIndex] = useState(0);
-  const [activePlan, setActivePlan] = useState<SubscriptionTier>(
-    initialBrand?.subscription_tier ?? sanitizePlan(selectedPlan),
-  );
   const [error, setError] = useState<string | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
   const [runningAnalysis, setRunningAnalysis] = useState(false);
   const [startingTrial, setStartingTrial] = useState(false);
   const [pendingRedirect, setPendingRedirect] = useState<string | null>(null);
+  const trialOffering = SUBSCRIPTION_PLANS[0];
 
   useEffect(() => {
     if (!runningAnalysis) {
@@ -219,7 +204,7 @@ export function OnboardingWizard({
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        subscriptionTier: activePlan,
+        subscriptionTier: DEFAULT_TRIAL_SUBSCRIPTION_TIER,
       }),
     });
 
@@ -251,7 +236,7 @@ export function OnboardingWizard({
           </h1>
           <p className="mt-4 max-w-2xl text-base leading-8 text-mid">
             We start with brand details, analyze the public site for crawlability and
-            content signals, then lock in the trial tier your dashboard should open on.
+            content signals, then start your trial on the full product surface (every model and feature).
           </p>
         </div>
 
@@ -527,7 +512,7 @@ export function OnboardingWizard({
                       onClick={() => setStep(3)}
                       className="btn-primary min-w-[180px] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      Continue to plan
+                      Continue to trial
                     </button>
                   </div>
                 </div>
@@ -547,46 +532,28 @@ export function OnboardingWizard({
                     Step 3
                   </div>
                   <h2 className="mt-2 font-display text-3xl text-dark">
-                    Choose your starting trial
+                    Start your free trial
                   </h2>
                   <p className="mt-3 max-w-2xl text-sm leading-7 text-mid">
-                    Pick the tier that best matches how often you want visibility analysis
-                    and how much cross-model intelligence you need from day one.
+                    Every trial includes the same visibility, gap, and content workflow—focused on how
+                    AI answers wellness and supplement shoppers, not on picking a product tier.
                   </p>
                 </div>
 
-                <div className="grid gap-4 lg:grid-cols-3">
-                  {SUBSCRIPTION_PLANS.map((plan) => {
-                    const isActive = plan.tier === activePlan;
-
-                    return (
-                      <button
-                        key={plan.tier}
-                        type="button"
-                        onClick={() => setActivePlan(plan.tier)}
-                        className={`rounded-card border p-5 text-left transition-transform duration-200 hover:-translate-y-1 ${
-                          isActive
-                            ? "border-sage bg-sage text-white"
-                            : "border-sage/15 bg-white text-dark"
-                        }`}
-                      >
-                        <div className="text-xs font-medium uppercase tracking-[1.5px]">
-                          {plan.name}
-                        </div>
-                        <div className="mt-3 font-display text-4xl">{plan.price}</div>
-                        <div className={`mt-1 text-sm ${isActive ? "text-white/80" : "text-mid"}`}>
-                          {plan.period}
-                        </div>
-                        <p
-                          className={`mt-4 text-sm leading-6 ${
-                            isActive ? "text-white/82" : "text-mid"
-                          }`}
-                        >
-                          {plan.description}
-                        </p>
-                      </button>
-                    );
-                  })}
+                <div className="rounded-card border border-sage bg-sage p-6 text-white md:p-8">
+                  <div className="text-xs font-medium uppercase tracking-[1.5px] text-white/70">
+                    {trialOffering.name}
+                  </div>
+                  <div className="mt-2 font-display text-3xl text-white">{trialOffering.price}</div>
+                  <p className="mt-1 text-sm text-white/70">{trialOffering.period}</p>
+                  <p className="mt-4 text-sm leading-6 text-white/85">{trialOffering.description}</p>
+                  <ul className="mt-5 flex list-none flex-col gap-2 text-sm font-light text-white/85">
+                    {trialOffering.features.map((feature) => (
+                      <li key={feature} className="flex gap-2 before:content-['✓'] before:text-white/70">
+                        {feature}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
 
                 <div className="flex flex-wrap justify-between gap-3">
@@ -689,7 +656,7 @@ export function OnboardingWizard({
             <div className="mt-4 space-y-4 text-sm leading-6 text-mid">
               <p>Step 1 creates or updates the single brand record tied to your user.</p>
               <p>Step 2 stores a site analysis snapshot that future cycles can build from.</p>
-              <p>Step 3 marks the selected tier as a trial and opens the dashboard shell.</p>
+              <p>Step 3 starts your trial with the full product (all models and features).</p>
               <p>Step 4 optionally connects GitHub or Webflow so content flows directly into your site.</p>
             </div>
           </Card>
@@ -712,8 +679,8 @@ export function OnboardingWizard({
                 <div>{parseAliasInput(brandAliasesText).join(", ") || "None added yet"}</div>
               </div>
               <div>
-                <div className="font-medium text-dark">Plan</div>
-                <div>{activePlan}</div>
+                <div className="font-medium text-dark">Access</div>
+                <div>{trialOffering.name} — full stack</div>
               </div>
             </div>
           </Card>

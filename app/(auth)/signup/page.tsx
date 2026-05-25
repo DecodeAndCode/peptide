@@ -2,22 +2,12 @@ import { redirect } from "next/navigation";
 import { AuthCard } from "@/app/(auth)/components/AuthCard";
 import { SignupForm } from "@/app/(auth)/components/SignupForm";
 import { getDashboardContext } from "@/lib/brands";
-import type { SubscriptionTier } from "@/types";
 
 interface SignupPageProps {
   searchParams?: {
     error?: string;
     message?: string;
-    plan?: SubscriptionTier;
   };
-}
-
-function getSelectedPlan(plan: SubscriptionTier | undefined): SubscriptionTier {
-  if (plan === "starter" || plan === "growth" || plan === "pro") {
-    return plan;
-  }
-
-  return "growth";
 }
 
 export default async function SignupPage({ searchParams }: SignupPageProps) {
@@ -31,14 +21,14 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
     <AuthCard
       eyebrow="Start your trial"
       title="Create the workspace your brand team will build from."
-      description="Your account opens the secure dashboard, stores onboarding inputs behind RLS, and sets the plan your first trial should start on."
+      description="Your account opens a secure workspace and a free trial: how AI talks about your wellness or supplement brand, where you lose out to competitors, and actionable drafts and ideas—not a laundry list of technical features."
       alternateHref="/login"
       alternateLabel="Already have access?"
       alternateText="Sign in with your password or request a magic link if you are returning."
       notice={searchParams?.message ?? null}
       error={searchParams?.error ?? null}
     >
-      <SignupForm selectedPlan={getSelectedPlan(searchParams?.plan)} />
+      <SignupForm />
     </AuthCard>
   );
 }

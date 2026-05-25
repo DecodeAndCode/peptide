@@ -39,7 +39,12 @@ export function ReportActionButtons({
   return (
     <div className={className}>
       <div className="flex flex-wrap gap-3">
-        <a href={`/api/reports/${cycleId}/download`} className="btn-primary px-5 py-2.5">
+        <a
+          href={`/api/reports/${cycleId}/download`}
+          target="_blank"
+          rel="noreferrer"
+          className="btn-primary px-5 py-2.5"
+        >
           Download PDF
         </a>
         <button

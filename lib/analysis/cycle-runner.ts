@@ -5,10 +5,23 @@ import { generatePromptLibrary } from "@/lib/analysis/prompt-engine";
 import { generateCycleInfluencerMatches } from "@/lib/influencers/matcher";
 import { runPromptAcrossModels } from "@/lib/llm/aggregator";
 import { generateAndStoreCycleReport } from "@/lib/reports/report-service";
-import { getSuppgoTestModePromptExecutionCap, isSuppgoTestModeEnabled } from "@/lib/supabase/env";
+import {
+  getSuppgoTestModePromptExecutionCap,
+  isSuppgoTestModeEnabled,
+  shouldForceSuppgoTestModeCategoryCoverage,
+  shouldSkipPerplexityInAnalysisCycle,
+} from "@/lib/supabase/env";
 import { createClient } from "@/lib/supabase/server";
 import { getTierAnalysisConfig } from "@/lib/suppgo";
-import type { BrandRecord, CycleRecord, CycleRunSummary, PromptRecord, SiteAnalysisRecord } from "@/types";
+import type {
+  BrandRecord,
+  CycleRecord,
+  CycleRunSummary,
+  PromptCategory,
+  PromptDefinition,
+  PromptRecord,
+  SiteAnalysisRecord,
+} from "@/types";
 
 function roundToTwoDecimals(value: number) {
   return Math.round(value * 100) / 100;
@@ -34,7 +47,28 @@ function isTrialExpired(brand: BrandRecord) {
   return new Date(brand.trial_ends_at).getTime() < Date.now();
 }
 
-function applyTestModeCap<T>(items: T[], modelCount: number) {
+function serializePromptDefinition(item: PromptDefinition) {
+  return `${item.promptCategory}::${item.promptText}`;
+}
+
+function applyForcedCategoryCoverage(items: PromptDefinition[], maxTemplates: number) {
+  const categoryOrder: PromptCategory[] = [
+    "explicit_recommendation",
+    "problem_solution",
+    "ingredient_education",
+    "product_interaction",
+  ];
+  const guaranteedSelection = categoryOrder
+    .map((category) => items.find((item) => item.promptCategory === category) ?? null)
+    .filter((item): item is PromptDefinition => Boolean(item))
+    .slice(0, maxTemplates);
+  const selectedKeys = new Set(guaranteedSelection.map(serializePromptDefinition));
+  const remaining = items.filter((item) => !selectedKeys.has(serializePromptDefinition(item)));
+
+  return [...guaranteedSelection, ...remaining].slice(0, maxTemplates);
+}
+
+function applyTestModeCap(items: PromptDefinition[], modelCount: number) {
   const testModeEnabled = isSuppgoTestModeEnabled();
 
   if (!testModeEnabled) {
@@ -46,9 +80,12 @@ function applyTestModeCap<T>(items: T[], modelCount: number) {
 
   const maxExecutions = getSuppgoTestModePromptExecutionCap();
   const maxTemplates = Math.max(1, Math.floor(maxExecutions / modelCount));
+  const cappedItems = shouldForceSuppgoTestModeCategoryCoverage()
+    ? applyForcedCategoryCoverage(items, maxTemplates)
+    : items.slice(0, maxTemplates);
 
   return {
-    items: items.slice(0, maxTemplates),
+    items: cappedItems,
     testModeApplied: items.length > maxTemplates,
   };
 }
@@ -99,13 +136,17 @@ export async function runAnalysisCycle({
 
   const supabase = supabaseClient ?? createClient();
   const config = getTierAnalysisConfig(brand.subscription_tier);
+  const cycleModels = shouldSkipPerplexityInAnalysisCycle()
+    ? config.models.filter((model) => model !== "perplexity-sonar-pro")
+    : config.models;
+
   const promptLibrary = generatePromptLibrary({
     brand,
     siteAnalysis,
   });
   const { items: selectedPromptTemplates, testModeApplied } = applyTestModeCap(
     promptLibrary,
-    config.models.length,
+    cycleModels.length,
   );
 
   if (selectedPromptTemplates.length === 0) {
@@ -122,7 +163,7 @@ export async function runAnalysisCycle({
 
   const cycleNumber = (latestCycle?.cycle_number ?? 0) + 1;
   const startedAt = new Date().toISOString();
-  const expectedExecutions = selectedPromptTemplates.length * config.models.length;
+  const expectedExecutions = selectedPromptTemplates.length * cycleModels.length;
 
   const { data: cycle, error: cycleInsertError } = await supabase
     .from("cycles")
@@ -130,7 +171,7 @@ export async function runAnalysisCycle({
       brand_id: brand.id,
       status: "running",
       cycle_number: cycleNumber,
-      models_queried: config.models,
+      models_queried: cycleModels,
       total_prompts: expectedExecutions,
       started_at: startedAt,
     })
@@ -151,7 +192,7 @@ export async function runAnalysisCycle({
           siteAnalysis,
           promptText,
           promptCategory,
-          models: config.models,
+          models: cycleModels,
           includeCompetitors: true,
         }),
     );
@@ -273,7 +314,7 @@ export async function runAnalysisCycle({
       cycleNumber,
       totalPromptTemplates: selectedPromptTemplates.length,
       totalPromptExecutions: results.length,
-      modelsQueried: config.models,
+      modelsQueried: cycleModels,
       mentionCount,
       visibilityScore,
       testModeApplied,

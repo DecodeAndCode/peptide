@@ -1,4 +1,11 @@
-import type { IndustryOption, MarketingPlan, PromptCategory, PromptModel, SubscriptionTier } from "@/types";
+import type {
+  GeneratedContentType,
+  IndustryOption,
+  MarketingPlan,
+  PromptCategory,
+  PromptModel,
+  SubscriptionTier,
+} from "@/types";
 
 export const INDUSTRY_OPTIONS: IndustryOption[] = [
   { label: "Vitamins & Minerals", value: "vitamins_minerals" },
@@ -15,50 +22,29 @@ export const INDUSTRY_OPTIONS: IndustryOption[] = [
   { label: "General Wellness", value: "general_wellness" },
 ];
 
+/** Tier stored on new signups / trials while product is single-surface (former Pro). */
+export const DEFAULT_TRIAL_SUBSCRIPTION_TIER = "pro" as const satisfies SubscriptionTier;
+
+/**
+ * Single public offering: full product for every account during early access.
+ * Tier pickers were removed from marketing and auth; `tier` stays `pro` for API compatibility.
+ */
 export const SUBSCRIPTION_PLANS: MarketingPlan[] = [
   {
-    name: "Starter",
-    tier: "starter",
-    price: "$49",
-    period: "per month",
-    description: "A reliable single-model baseline for early-stage visibility tracking.",
-    features: [
-      "Monthly analysis cycle",
-      "GPT-4o monitoring",
-      "50 prompts per cycle",
-      "llms.txt and FAQ guidance",
-      "Downloadable report access",
-    ],
-  },
-  {
-    name: "Growth",
-    tier: "growth",
-    price: "$149",
-    period: "per month",
-    description:
-      "Cross-model benchmarking with higher prompt volume for growing consumer health brands.",
-    featured: true,
-    features: [
-      "Bi-weekly analysis cycles",
-      "GPT-4o and Claude monitoring",
-      "150 prompts per cycle",
-      "Competitor benchmarking",
-      "Product interaction content generation",
-    ],
-  },
-  {
-    name: "Pro",
+    name: "SuppGo",
     tier: "pro",
-    price: "$349",
-    period: "per month",
+    price: "Free trial",
+    period: "14-day trial",
+    featured: true,
     description:
-      "The fullest view, including Perplexity's search-grounded perspective and widest prompt coverage.",
+      "See where your brand appears when shoppers ask AI about supplements and wellness, where rivals win the recommendation, and what to publish next—without wading through model names or engineering jargon.",
     features: [
-      "Weekly analysis cycles",
-      "GPT-4o, Claude, and Perplexity",
-      "400+ prompts per cycle",
-      "Influencer matching module",
-      "Citation-backed intelligence",
+      "Gain visibility across all major AI models, the same ones your customers use to research health & wellness",
+      "Broad coverage of realistic prompts—discover questions your customers are asking AI and ensure you're in the answers they get",
+      "Clear competitor gap views—see who gets cited instead of you, on which topics, and win back those citations",
+      "Draft FAQs and education-style content—we give you the targeted content you need to boost visibility in the right places",
+      "Curated influencer matching—find creators who are a perfect match for your brand and connect with them in one click",
+      "Live dashboard plus PDF reports your team can share—you'll always know where your visibility stands",
     ],
   },
 ];
@@ -106,6 +92,32 @@ export const PROMPT_CATEGORY_LABELS: Record<PromptCategory, string> = {
   product_interaction: "Product Interaction",
 };
 
+/** Human-facing draft types plus one-line “why this draft exists” for cards and reports. */
+export const GENERATED_CONTENT_DISPLAY: Record<
+  GeneratedContentType,
+  { label: string; rationale: string }
+> = {
+  product_interaction: {
+    label: "Ingredient interactions",
+    rationale:
+      "From missed “can I take this with that?” prompts—longer, safety-aware copy for stacks and ingredient combos.",
+  },
+  faq_snippet: {
+    label: "FAQ snippet",
+    rationale:
+      "From other missed prompts (recommendations, problems, education)—a concise publishable Q&A to win those answers.",
+  },
+  llms_txt: {
+    label: "Brand context file",
+    rationale:
+      "Machine-readable summary of your brand, products, and claims—helps assistants and crawlers cite you consistently.",
+  },
+};
+
+export function getGeneratedContentDisplay(type: GeneratedContentType) {
+  return GENERATED_CONTENT_DISPLAY[type];
+}
+
 export const PROMPT_CATEGORY_WEIGHTS: Record<PromptCategory, number> = {
   explicit_recommendation: 1,
   problem_solution: 1,
@@ -132,10 +144,18 @@ export function getIndustryLabel(value: string) {
   return INDUSTRY_OPTIONS.find((option) => option.value === value)?.label ?? value;
 }
 
-export function getSubscriptionPlan(tier: MarketingPlan["tier"]) {
-  return SUBSCRIPTION_PLANS.find((plan) => plan.tier === tier) ?? SUBSCRIPTION_PLANS[0];
+export function getSubscriptionPlan(_tier: MarketingPlan["tier"]) {
+  return SUBSCRIPTION_PLANS[0];
 }
 
-export function getTierAnalysisConfig(tier: SubscriptionTier) {
-  return TIER_ANALYSIS_CONFIG[tier];
+/**
+ * Returns the effective analysis config for a brand.
+ *
+ * Tier gating is removed while there are no paying customers — every brand
+ * runs on the former Pro config (all models, all content types, influencer
+ * matching). The `tier` argument is accepted for interface compatibility but
+ * has no effect on the returned config.
+ */
+export function getTierAnalysisConfig(_tier: SubscriptionTier): TierAnalysisConfig {
+  return TIER_ANALYSIS_CONFIG["pro"];
 }

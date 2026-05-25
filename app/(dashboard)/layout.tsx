@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { DashboardWalkthrough } from "@/components/dashboard/DashboardWalkthrough";
 import { DashboardSidebar } from "@/components/layout/DashboardSidebar";
 import { DashboardTopbar } from "@/components/layout/DashboardTopbar";
 import { getDashboardContext } from "@/lib/brands";
@@ -28,6 +29,7 @@ export default async function DashboardLayout({
       <div className="min-h-screen">
         <DashboardTopbar brand={context.brand} latestCycle={context.latestCycle} />
         <main className="px-6 py-6 md:px-8 md:py-8">{children}</main>
+        <DashboardWalkthrough />
       </div>
     </div>
   );
