@@ -3,11 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import type { CmsDeploymentPreviewLink, CmsDeploymentRunStatus } from "@/types";
 
+type CmsProvider = "webflow" | "shopify";
+
 interface CmsDeployButtonProps {
   cycleId: string;
   connected: boolean;
   siteName: string | null;
   dryRun?: boolean;
+  provider?: CmsProvider;
 }
 
 interface CmsDeploymentResult {
@@ -24,34 +27,72 @@ interface CmsDeploymentResult {
   error?: string;
 }
 
-const PROGRESS_MESSAGES = [
-  "Analyzing Webflow CMS…",
-  "Matching recommendations to sections…",
-  "Creating draft updates…",
-  "Preparing preview links…",
-];
+const PROVIDER_LABEL: Record<CmsProvider, string> = {
+  webflow: "Webflow",
+  shopify: "Shopify",
+};
 
-export function CmsDeployButton({ cycleId, connected, siteName, dryRun = false }: CmsDeployButtonProps) {
+const PRIMARY_LINK_TYPE: Record<CmsProvider, CmsDeploymentPreviewLink["type"]> = {
+  webflow: "webflow_dashboard",
+  shopify: "shopify_admin",
+};
+
+const ITEM_LINK_TYPES: Record<CmsProvider, ReadonlyArray<CmsDeploymentPreviewLink["type"]>> = {
+  webflow: ["cms_item"],
+  shopify: ["shopify_product", "shopify_article", "shopify_page"],
+};
+
+const PRIMARY_CTA: Record<CmsProvider, string> = {
+  webflow: "Open Webflow Designer (CMS)",
+  shopify: "Open Shopify Admin",
+};
+
+function progressMessages(provider: CmsProvider): string[] {
+  const label = PROVIDER_LABEL[provider];
+  return [
+    `Analyzing ${label} CMS…`,
+    "Matching recommendations to sections…",
+    "Creating draft updates…",
+    "Preparing preview links…",
+  ];
+}
+
+export function CmsDeployButton({
+  cycleId,
+  connected,
+  siteName,
+  dryRun = false,
+  provider = "webflow",
+}: CmsDeployButtonProps) {
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">("idle");
   const [messageIndex, setMessageIndex] = useState(0);
   const [result, setResult] = useState<CmsDeploymentResult["deployment"] | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const providerLabel = PROVIDER_LABEL[provider];
+  const messages = useMemo(() => progressMessages(provider), [provider]);
+
   useEffect(() => {
     if (state !== "loading") return;
     const interval = window.setInterval(() => {
-      setMessageIndex((current) => Math.min(current + 1, PROGRESS_MESSAGES.length - 1));
+      setMessageIndex((current) => Math.min(current + 1, messages.length - 1));
     }, 1400);
     return () => window.clearInterval(interval);
-  }, [state]);
+  }, [state, messages.length]);
 
   const primaryLink = useMemo(() => {
-    return result?.preview_links.find((link) => link.type === "webflow_dashboard") ?? result?.preview_links[0] ?? null;
-  }, [result]);
+    const preferredType = PRIMARY_LINK_TYPE[provider];
+    return (
+      result?.preview_links.find((link) => link.type === preferredType) ??
+      result?.preview_links[0] ??
+      null
+    );
+  }, [result, provider]);
 
   const reviewItems = useMemo(() => {
-    return result?.preview_links.filter((link) => link.type === "cms_item") ?? [];
-  }, [result]);
+    const types = ITEM_LINK_TYPES[provider];
+    return result?.preview_links.filter((link) => types.includes(link.type)) ?? [];
+  }, [result, provider]);
 
   async function handleDeploy() {
     if (!connected && !dryRun) return;
@@ -64,7 +105,7 @@ export function CmsDeployButton({ cycleId, connected, siteName, dryRun = false }
     const res = await fetch("/api/integrations/cms/deploy-cycle", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cycle_id: cycleId, provider: "webflow", ...(dryRun ? { dry_run: true } : {}) }),
+      body: JSON.stringify({ cycle_id: cycleId, provider, ...(dryRun ? { dry_run: true } : {}) }),
     });
 
     const data = (await res.json().catch(() => null)) as CmsDeploymentResult | null;
@@ -83,7 +124,7 @@ export function CmsDeployButton({ cycleId, connected, siteName, dryRun = false }
   if (!connected && !dryRun) {
     return (
       <a href="/settings" className="btn-outline px-5 py-2.5 text-sm">
-        Connect Webflow CMS
+        Connect {providerLabel} CMS
       </a>
     );
   }
@@ -93,18 +134,18 @@ export function CmsDeployButton({ cycleId, connected, siteName, dryRun = false }
       <div className="rounded-card border border-sage/15 bg-sage/5 p-4">
         {dryRun ? (
           <div className="mb-3 rounded-card border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">
-            Dry run — drafts were simulated with in-memory fixtures. Nothing was sent to Webflow.
+            Dry run — drafts were simulated with in-memory fixtures. Nothing was sent to {providerLabel}.
           </div>
         ) : null}
         <div className="text-sm font-medium text-dark">CMS drafts ready{siteName ? ` in ${siteName}` : ""}</div>
         <p className="mt-2 text-xs leading-6 text-mid">
           Created {result.created_count}, updated {result.updated_count}, skipped {result.skipped_count}. Review the
-          draft changes in Webflow before publishing.
+          draft changes in {providerLabel} before publishing.
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           {primaryLink ? (
             <a href={primaryLink.url} target="_blank" rel="noreferrer" className="btn-primary px-4 py-2 text-xs">
-              Open Webflow Designer (CMS)
+              {PRIMARY_CTA[provider]}
             </a>
           ) : null}
           <button
@@ -117,7 +158,7 @@ export function CmsDeployButton({ cycleId, connected, siteName, dryRun = false }
         </div>
         {reviewItems.length > 0 ? (
           <div className="mt-3 rounded-card border border-sage/10 bg-white/70 p-3">
-            <p className="text-xs font-medium text-dark">Drafts to review in Webflow</p>
+            <p className="text-xs font-medium text-dark">Drafts to review in {providerLabel}</p>
             <ul className="mt-2 space-y-1 text-xs leading-5 text-mid">
               {reviewItems.slice(0, 5).map((link) => (
                 <li key={`${link.label}-${link.url}`}>{link.label}</li>
@@ -140,7 +181,9 @@ export function CmsDeployButton({ cycleId, connected, siteName, dryRun = false }
     return (
       <div className="rounded-card border border-accent/25 bg-accent/10 p-4">
         <p className="text-sm font-medium text-dark">CMS updates need attention</p>
-        <p className="mt-2 text-xs leading-6 text-mid">{errorMessage ?? "SuppGO could not create Webflow drafts."}</p>
+        <p className="mt-2 text-xs leading-6 text-mid">
+          {errorMessage ?? `SuppGO could not create ${providerLabel} drafts.`}
+        </p>
         <button
           type="button"
           onClick={() => setState("idle")}
@@ -164,7 +207,7 @@ export function CmsDeployButton({ cycleId, connected, siteName, dryRun = false }
       } disabled:cursor-not-allowed disabled:opacity-70`}
     >
       {state === "loading"
-        ? PROGRESS_MESSAGES[messageIndex]
+        ? messages[messageIndex]
         : dryRun
           ? "Try CMS deploy (dry run)"
           : "Apply CMS updates"}

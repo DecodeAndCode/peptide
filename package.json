@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:webflow:deploy": "tsx scripts/test-webflow-deploy.ts"
+    "test:webflow:deploy": "tsx scripts/test-webflow-deploy.ts",
+    "test:shopify:deploy": "tsx scripts/test-shopify-deploy.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.79.0",

@@ -6,7 +6,11 @@ import { GitHubDeployButton } from "@/components/dashboard/GitHubDeployButton";
 import { CmsDeployButton } from "@/components/dashboard/CmsDeployButton";
 import { VisibilityGraph } from "@/components/dashboard/VisibilityGraph";
 import { getDashboardOverview } from "@/lib/dashboard";
-import { getGitHubIntegrationStatus, getWebflowIntegrationStatus } from "@/lib/integrations";
+import {
+  getGitHubIntegrationStatus,
+  getShopifyIntegrationStatus,
+  getWebflowIntegrationStatus,
+} from "@/lib/integrations";
 import { formatRoundedValue, formatSignedRoundedValue } from "@/lib/formatting";
 import { getGeneratedContentDisplay, getSubscriptionPlan } from "@/lib/suppgo";
 import { isSuppgoTestModeEnabled } from "@/lib/supabase/env";
@@ -26,16 +30,22 @@ export default async function DashboardPage() {
     return null;
   }
 
-  const [plan, testModeEnabled, githubIntegration, webflowIntegration] = [
+  const [plan, testModeEnabled, githubIntegration, webflowIntegration, shopifyIntegration] = [
     getSubscriptionPlan(overview.brand.subscription_tier),
     isSuppgoTestModeEnabled(),
     await getGitHubIntegrationStatus(overview.brand.id),
     await getWebflowIntegrationStatus(overview.brand.id),
+    await getShopifyIntegrationStatus(overview.brand.id),
   ] as const;
 
   const hasGitHub = githubIntegration.connected && !!githubIntegration.repo_full_name;
   const hasWebflow = webflowIntegration.connected;
-  const dryRunFallback = !hasWebflow && process.env.SUPPGO_TEST_MODE === "true";
+  const hasShopify = shopifyIntegration.connected;
+  const activeCmsProvider: "webflow" | "shopify" = hasShopify && !hasWebflow ? "shopify" : "webflow";
+  const hasCms = activeCmsProvider === "shopify" ? hasShopify : hasWebflow;
+  const cmsSiteName =
+    activeCmsProvider === "shopify" ? shopifyIntegration.shop_domain : webflowIntegration.site_name;
+  const dryRunFallback = !hasCms && process.env.SUPPGO_TEST_MODE === "true";
 
   return (
     <div className="space-y-6">
@@ -259,11 +269,13 @@ export default async function DashboardPage() {
             </span>
             <span
               className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
-                hasWebflow ? "bg-sage/10 text-sage" : "bg-sage/5 text-mid"
+                hasCms ? "bg-sage/10 text-sage" : "bg-sage/5 text-mid"
               }`}
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${hasWebflow ? "bg-sage" : "bg-mid/40"}`} />
-              {hasWebflow ? "Webflow connected" : "Webflow not connected"}
+              <span className={`h-1.5 w-1.5 rounded-full ${hasCms ? "bg-sage" : "bg-mid/40"}`} />
+              {hasCms
+                ? `${activeCmsProvider === "shopify" ? "Shopify" : "Webflow"} connected`
+                : "CMS not connected"}
             </span>
             <a href="/reports" className="btn-outline px-5 py-2.5">
               View reports for all generated content
@@ -274,9 +286,10 @@ export default async function DashboardPage() {
           {overview.latestCompletedCycle ? (
             <CmsDeployButton
               cycleId={overview.latestCompletedCycle.id}
-              connected={hasWebflow || dryRunFallback}
-              siteName={webflowIntegration.site_name}
+              connected={hasCms || dryRunFallback}
+              siteName={cmsSiteName}
               dryRun={dryRunFallback}
+              provider={activeCmsProvider}
             />
           ) : null}
           {!hasGitHub ? (

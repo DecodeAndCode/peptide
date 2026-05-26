@@ -1,0 +1,21 @@
+-- v1.4: Shopify CMS deployment support
+--
+-- No schema changes required. The `integrations.integration_type`,
+-- `content_deployments.integration_type`, and `cms_deployment_runs.integration_type`
+-- columns are plain `text` with no CHECK constraint, so adding a new provider
+-- ("shopify") is purely an application-layer concern.
+--
+-- Expected credentials JSON shape for `integration_type = 'shopify'`:
+--   {
+--     "access_token_enc": "<aes-256-gcm ciphertext>",
+--     "shop_domain":      "example.myshopify.com",
+--     "scope":            "read_products,write_products,read_content,write_content",
+--     "blog_id":          "gid://shopify/Blog/123" | null,
+--     "blog_handle":      "news" | null
+--   }
+--
+-- Preview link `type` values used by Shopify deployments:
+--   - "shopify_admin"   — links to the shop's admin dashboard
+--   - "shopify_product" — links to a product's admin detail page
+--   - "shopify_article" — links to a draft blog article
+--   - "shopify_page"    — links to a draft page

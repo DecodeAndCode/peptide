@@ -6,6 +6,7 @@ import { INDUSTRY_OPTIONS, SUBSCRIPTION_PLANS } from "@/lib/suppgo";
 import type {
   BrandRecord,
   GitHubIntegrationStatus,
+  ShopifyIntegrationStatus,
   WebflowIntegrationStatus,
   WebflowSiteSummary,
 } from "@/types";
@@ -14,6 +15,7 @@ interface SettingsPageClientProps {
   brand: BrandRecord;
   githubIntegration: GitHubIntegrationStatus;
   webflowIntegration: WebflowIntegrationStatus;
+  shopifyIntegration: ShopifyIntegrationStatus;
 }
 
 function parseAliasInput(value: string) {
@@ -27,11 +29,38 @@ function parseAliasInput(value: string) {
   ).slice(0, 12);
 }
 
+function decodeShopifyError(code: string): string {
+  switch (code) {
+    case "shopify_missing_shop":
+      return "Enter your *.myshopify.com domain before connecting.";
+    case "shopify_invalid_shop":
+      return "That doesn't look like a valid Shopify store domain.";
+    case "shopify_shop_mismatch":
+      return "The OAuth callback came from a different store than the one you started with. Please retry.";
+    case "shopify_hmac_invalid":
+      return "Shopify rejected the callback signature. Please retry the connection.";
+    case "shopify_token_exchange_failed":
+    case "shopify_token_missing":
+      return "Shopify did not return an access token. Please retry.";
+    case "shopify_save_failed":
+      return "We couldn't save the Shopify integration. Please retry.";
+    case "shopify_not_configured":
+      return "Shopify OAuth is not configured on this deployment.";
+    default:
+      return "Shopify connection failed. Please try again.";
+  }
+}
+
 function getInitialCompetitors(competitorUrls: string[]) {
   return [...competitorUrls, ...Array.from({ length: Math.max(0, 5 - competitorUrls.length) }, () => "")].slice(0, 5);
 }
 
-export function SettingsPageClient({ brand, githubIntegration, webflowIntegration }: SettingsPageClientProps) {
+export function SettingsPageClient({
+  brand,
+  githubIntegration,
+  webflowIntegration,
+  shopifyIntegration,
+}: SettingsPageClientProps) {
   const [brandName, setBrandName] = useState(brand.brand_name);
   const [websiteUrl, setWebsiteUrl] = useState(brand.website_url);
   const [brandAliasesText, setBrandAliasesText] = useState((brand.brand_aliases ?? []).join(", "));
@@ -59,6 +88,13 @@ export function SettingsPageClient({ brand, githubIntegration, webflowIntegratio
   const [isWebflowPending, startWebflowTransition] = useTransition();
   const [confirmWebflowDisconnect, setConfirmWebflowDisconnect] = useState(false);
 
+  // Shopify integration state
+  const [shopify, setShopify] = useState<ShopifyIntegrationStatus>(shopifyIntegration);
+  const [shopifyMessage, setShopifyMessage] = useState<string | null>(null);
+  const [shopifyShopInput, setShopifyShopInput] = useState("");
+  const [isShopifyPending, startShopifyTransition] = useTransition();
+  const [confirmShopifyDisconnect, setConfirmShopifyDisconnect] = useState(false);
+
   // Show success message if redirected back from GitHub OAuth
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -79,7 +115,53 @@ export function SettingsPageClient({ brand, githubIntegration, webflowIntegratio
       setWebflowMessage("Webflow connection failed. Please try again.");
       window.history.replaceState({}, "", window.location.pathname);
     }
+    if (params.get("shopify") === "connected") {
+      setShopifyMessage("Shopify connected. SuppGO will deploy drafts to your store.");
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+    if (params.get("error")?.startsWith("shopify_")) {
+      setShopifyMessage(decodeShopifyError(params.get("error") ?? ""));
+      window.history.replaceState({}, "", window.location.pathname);
+    }
   }, []);
+
+  function handleConnectShopify() {
+    const raw = shopifyShopInput.trim().toLowerCase();
+    if (!raw) {
+      setShopifyMessage("Enter your *.myshopify.com domain to connect.");
+      return;
+    }
+    const normalized = raw.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+    if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(normalized)) {
+      setShopifyMessage("Enter a valid *.myshopify.com domain (e.g. acme-supplements.myshopify.com).");
+      return;
+    }
+    window.location.assign(
+      `/api/integrations/shopify/authorize?from=settings&shop=${encodeURIComponent(normalized)}`,
+    );
+  }
+
+  function handleDisconnectShopify() {
+    setShopifyMessage(null);
+    setConfirmShopifyDisconnect(false);
+    startShopifyTransition(async () => {
+      const res = await fetch("/api/integrations/shopify/disconnect", { method: "DELETE" });
+      if (!res.ok) {
+        setShopifyMessage("Failed to disconnect Shopify.");
+        return;
+      }
+      setShopify({
+        connected: false,
+        shop_domain: null,
+        scope: null,
+        blog_id: null,
+        blog_handle: null,
+        status: "disconnected",
+      });
+      setShopifyShopInput("");
+      setShopifyMessage("Shopify disconnected.");
+    });
+  }
 
   async function loadRepos() {
     setLoadingRepos(true);
@@ -665,16 +747,86 @@ export function SettingsPageClient({ brand, githubIntegration, webflowIntegratio
           ) : null}
         </div>
 
-        <div className="mt-4 rounded-card border border-sage/10 bg-white/60 p-5 opacity-60">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-card border border-sage/20 bg-sage/5 text-sm font-bold text-dark">
-              CMS
+        <div className="mt-4 rounded-card border border-sage/10 bg-white/60 p-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-card border border-sage/20 bg-sage/5 text-sm font-bold text-dark">
+                SH
+              </div>
+              <div>
+                <div className="font-medium text-dark">Shopify CMS</div>
+                <div className="mt-0.5 text-xs text-mid">
+                  {shopify.connected
+                    ? `Connected to ${shopify.shop_domain ?? "your store"}.`
+                    : "Stage draft articles, pages, and product metafields in your Shopify store."}
+                </div>
+              </div>
             </div>
-            <div>
-              <div className="font-medium text-dark">More CMS providers</div>
-              <div className="mt-0.5 text-xs text-mid">Contentful, Sanity, Shopify — coming next</div>
+            <div className="flex flex-wrap items-center gap-2">
+              {shopify.connected ? (
+                <>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-sage/10 px-3 py-1 text-xs font-medium text-sage">
+                    <span className="h-1.5 w-1.5 rounded-full bg-sage" /> Active
+                  </span>
+                  {confirmShopifyDisconnect ? (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleDisconnectShopify}
+                        disabled={isShopifyPending}
+                        className="rounded-card border border-accent/40 px-3 py-1 text-xs text-accent transition hover:border-accent/60 disabled:opacity-60"
+                      >
+                        {isShopifyPending ? "..." : "Confirm"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmShopifyDisconnect(false)}
+                        className="rounded-card border border-sage/20 px-3 py-1 text-xs text-mid transition hover:border-sage/40"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmShopifyDisconnect(true)}
+                      className="rounded-card border border-sage/20 px-3 py-1 text-xs text-mid transition hover:border-sage/40"
+                    >
+                      Disconnect
+                    </button>
+                  )}
+                </>
+              ) : null}
             </div>
           </div>
+
+          {!shopify.connected ? (
+            <div className="mt-4 flex flex-wrap items-end gap-2">
+              <div className="flex-1 min-w-[220px]">
+                <label className="text-xs font-medium text-dark" htmlFor="shopify-shop">
+                  Shopify store domain
+                </label>
+                <input
+                  id="shopify-shop"
+                  type="text"
+                  inputMode="url"
+                  placeholder="acme-supplements.myshopify.com"
+                  value={shopifyShopInput}
+                  onChange={(event) => setShopifyShopInput(event.target.value)}
+                  className="mt-1 w-full rounded-card border border-sage/20 bg-white px-4 py-2.5 text-sm text-dark outline-none transition-colors duration-200 focus:border-sage"
+                />
+              </div>
+              <button type="button" onClick={handleConnectShopify} className="btn-primary px-4 py-2.5 text-sm">
+                Connect Shopify
+              </button>
+            </div>
+          ) : null}
+
+          {shopifyMessage ? <p className="mt-4 text-sm text-mid">{shopifyMessage}</p> : null}
+
+          <p className="mt-3 text-xs text-mid">
+            Only one CMS can be active per brand. Connecting Shopify will disconnect Webflow automatically.
+          </p>
         </div>
       </Card>
     </div>
