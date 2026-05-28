@@ -239,6 +239,7 @@ export async function createShopifyDraftArticle(opts: {
   title: string;
   bodyHtml: string;
   summary?: string | null;
+  authorName?: string;
 }): Promise<{ article: ShopifyArticleDraft | null; userErrors: ShopifyUserError[] }> {
   const data = await shopifyGraphqlRequest<{
     articleCreate: {
@@ -262,6 +263,7 @@ export async function createShopifyDraftArticle(opts: {
         body: opts.bodyHtml,
         summary: opts.summary ?? null,
         isPublished: false,
+        author: { name: opts.authorName?.trim() || "SuppGO" },
       },
     },
   });

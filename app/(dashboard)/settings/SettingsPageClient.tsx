@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useEffect } from "react";
 import { Card } from "@/components/ui/Card";
+import { ShopifyConnectForm } from "@/components/integrations/ShopifyConnectForm";
 import { INDUSTRY_OPTIONS, SUBSCRIPTION_PLANS } from "@/lib/suppgo";
 import type {
   BrandRecord,
@@ -27,28 +28,6 @@ function parseAliasInput(value: string) {
         .filter(Boolean),
     ),
   ).slice(0, 12);
-}
-
-function decodeShopifyError(code: string): string {
-  switch (code) {
-    case "shopify_missing_shop":
-      return "Enter your *.myshopify.com domain before connecting.";
-    case "shopify_invalid_shop":
-      return "That doesn't look like a valid Shopify store domain.";
-    case "shopify_shop_mismatch":
-      return "The OAuth callback came from a different store than the one you started with. Please retry.";
-    case "shopify_hmac_invalid":
-      return "Shopify rejected the callback signature. Please retry the connection.";
-    case "shopify_token_exchange_failed":
-    case "shopify_token_missing":
-      return "Shopify did not return an access token. Please retry.";
-    case "shopify_save_failed":
-      return "We couldn't save the Shopify integration. Please retry.";
-    case "shopify_not_configured":
-      return "Shopify OAuth is not configured on this deployment.";
-    default:
-      return "Shopify connection failed. Please try again.";
-  }
 }
 
 function getInitialCompetitors(competitorUrls: string[]) {
@@ -91,7 +70,6 @@ export function SettingsPageClient({
   // Shopify integration state
   const [shopify, setShopify] = useState<ShopifyIntegrationStatus>(shopifyIntegration);
   const [shopifyMessage, setShopifyMessage] = useState<string | null>(null);
-  const [shopifyShopInput, setShopifyShopInput] = useState("");
   const [isShopifyPending, startShopifyTransition] = useTransition();
   const [confirmShopifyDisconnect, setConfirmShopifyDisconnect] = useState(false);
 
@@ -115,30 +93,18 @@ export function SettingsPageClient({
       setWebflowMessage("Webflow connection failed. Please try again.");
       window.history.replaceState({}, "", window.location.pathname);
     }
-    if (params.get("shopify") === "connected") {
-      setShopifyMessage("Shopify connected. SuppGO will deploy drafts to your store.");
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-    if (params.get("error")?.startsWith("shopify_")) {
-      setShopifyMessage(decodeShopifyError(params.get("error") ?? ""));
-      window.history.replaceState({}, "", window.location.pathname);
-    }
   }, []);
 
-  function handleConnectShopify() {
-    const raw = shopifyShopInput.trim().toLowerCase();
-    if (!raw) {
-      setShopifyMessage("Enter your *.myshopify.com domain to connect.");
-      return;
-    }
-    const normalized = raw.replace(/^https?:\/\//, "").replace(/\/+$/, "");
-    if (!/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(normalized)) {
-      setShopifyMessage("Enter a valid *.myshopify.com domain (e.g. acme-supplements.myshopify.com).");
-      return;
-    }
-    window.location.assign(
-      `/api/integrations/shopify/authorize?from=settings&shop=${encodeURIComponent(normalized)}`,
-    );
+  function handleShopifyConnected(result: { shopDomain: string; shopName: string }) {
+    setShopify({
+      connected: true,
+      shop_domain: result.shopDomain,
+      scope: null,
+      blog_id: null,
+      blog_handle: null,
+      status: "active",
+    });
+    setShopifyMessage(`Connected to ${result.shopName}.`);
   }
 
   function handleDisconnectShopify() {
@@ -158,7 +124,6 @@ export function SettingsPageClient({
         blog_handle: null,
         status: "disconnected",
       });
-      setShopifyShopInput("");
       setShopifyMessage("Shopify disconnected.");
     });
   }
@@ -801,26 +766,15 @@ export function SettingsPageClient({
           </div>
 
           {!shopify.connected ? (
-            <div className="mt-4 flex flex-wrap items-end gap-2">
-              <div className="flex-1 min-w-[220px]">
-                <label className="text-xs font-medium text-dark" htmlFor="shopify-shop">
-                  Shopify store domain
-                </label>
-                <input
-                  id="shopify-shop"
-                  type="text"
-                  inputMode="url"
-                  placeholder="acme-supplements.myshopify.com"
-                  value={shopifyShopInput}
-                  onChange={(event) => setShopifyShopInput(event.target.value)}
-                  className="mt-1 w-full rounded-card border border-sage/20 bg-white px-4 py-2.5 text-sm text-dark outline-none transition-colors duration-200 focus:border-sage"
-                />
-              </div>
-              <button type="button" onClick={handleConnectShopify} className="btn-primary px-4 py-2.5 text-sm">
-                Connect Shopify
-              </button>
+            <div className="mt-4">
+              <ShopifyConnectForm onConnected={handleShopifyConnected} variant="full" />
             </div>
-          ) : null}
+          ) : (
+            <p className="mt-3 text-xs text-mid">
+              Token rotated? <strong>Disconnect</strong> above, then reconnect with the new{" "}
+              <code>shpat_…</code>.
+            </p>
+          )}
 
           {shopifyMessage ? <p className="mt-4 text-sm text-mid">{shopifyMessage}</p> : null}
 

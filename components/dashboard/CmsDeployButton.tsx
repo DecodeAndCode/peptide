@@ -209,7 +209,7 @@ export function CmsDeployButton({
       {state === "loading"
         ? messages[messageIndex]
         : dryRun
-          ? "Try CMS deploy (dry run)"
+          ? `Try ${providerLabel} CMS (dry run)`
           : "Apply CMS updates"}
     </button>
   );

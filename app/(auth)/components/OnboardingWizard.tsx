@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Card } from "@/components/ui/Card";
+import { ShopifyConnectForm } from "@/components/integrations/ShopifyConnectForm";
 import { INDUSTRY_OPTIONS, DEFAULT_TRIAL_SUBSCRIPTION_TIER, SUBSCRIPTION_PLANS } from "@/lib/suppgo";
 import type { BrandRecord, SiteAnalysisRecord } from "@/types";
 
@@ -86,6 +87,11 @@ export function OnboardingWizard({ initialBrand, initialAnalysis }: OnboardingWi
   const [runningAnalysis, setRunningAnalysis] = useState(false);
   const [startingTrial, setStartingTrial] = useState(false);
   const [pendingRedirect, setPendingRedirect] = useState<string | null>(null);
+  const [shopifyOpen, setShopifyOpen] = useState(false);
+  const [shopifyConnected, setShopifyConnected] = useState<{
+    shopDomain: string;
+    shopName: string;
+  } | null>(null);
   const trialOffering = SUBSCRIPTION_PLANS[0];
 
   useEffect(() => {
@@ -624,25 +630,62 @@ export function OnboardingWizard({ initialBrand, initialAnalysis }: OnboardingWi
 
                   <button
                     type="button"
-                    onClick={() => {
-                      if (pendingRedirect) {
-                        router.push(pendingRedirect);
-                        router.refresh();
-                      }
-                    }}
-                    className="flex flex-col gap-3 rounded-card border border-sage/10 bg-white/60 p-5 text-left transition hover:border-sage/30 hover:bg-white"
+                    onClick={() => setShopifyOpen((v) => !v)}
+                    aria-expanded={shopifyOpen}
+                    className={`flex flex-col gap-3 rounded-card border p-5 text-left transition ${
+                      shopifyConnected
+                        ? "border-sage bg-sage/5"
+                        : "border-sage/20 bg-white hover:border-sage hover:bg-sage/5"
+                    }`}
                   >
-                    <div className="text-2xl">→</div>
-                    <div className="font-medium text-dark">Skip for now</div>
+                    <div className="text-2xl">🛍️</div>
+                    <div className="font-medium text-dark">Shopify CMS</div>
                     <p className="text-sm leading-6 text-mid">
-                      Content will appear in your dashboard for manual review and copy. You can
-                      connect a site integration at any time from Settings.
+                      Best for supplement brands on Shopify. SuppGo creates draft blog articles and
+                      product metafields so your team can review before publishing.
                     </p>
                     <span className="mt-auto inline-block rounded-pill bg-sage/10 px-3 py-1 text-xs font-medium text-sage">
-                      Go to dashboard →
+                      {shopifyConnected
+                        ? `✓ Connected to ${shopifyConnected.shopName}`
+                        : shopifyOpen
+                          ? "Hide form ↑"
+                          : "Connect Shopify →"}
                     </span>
                   </button>
                 </div>
+
+                {shopifyOpen && !shopifyConnected ? (
+                  <ShopifyConnectForm
+                    variant="compact"
+                    onConnected={(result) => {
+                      setShopifyConnected(result);
+                      setShopifyOpen(false);
+                    }}
+                  />
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (pendingRedirect) {
+                      router.push(pendingRedirect);
+                      router.refresh();
+                    }
+                  }}
+                  className="flex w-full flex-col gap-2 rounded-card border border-sage/10 bg-white/60 p-5 text-left transition hover:border-sage/30 hover:bg-white"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl">→</span>
+                    <span className="font-medium text-dark">
+                      {shopifyConnected ? "Continue to dashboard" : "Skip for now"}
+                    </span>
+                  </div>
+                  <p className="text-sm leading-6 text-mid">
+                    {shopifyConnected
+                      ? `Shopify is connected. SuppGo will draft updates to ${shopifyConnected.shopDomain} on each cycle.`
+                      : "Content will appear in your dashboard for manual review and copy. You can connect a site integration at any time from Settings."}
+                  </p>
+                </button>
               </div>
             ) : null}
           </Card>

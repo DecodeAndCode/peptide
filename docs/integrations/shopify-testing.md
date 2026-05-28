@@ -1,6 +1,8 @@
 # Testing the Shopify CMS Deployment
 
-The Shopify CMS deployer (`lib/shopify/cms-deployer.ts`) supports a **dry-run mode** so the full deploy flow can be exercised without a real Shopify store, OAuth credentials, or API calls. The architecture mirrors the Webflow deployer — same dry-run pattern, same gating, same CLI surface.
+The Shopify CMS deployer (`lib/shopify/cms-deployer.ts`) supports a **dry-run mode** so the full deploy flow can be exercised without a real Shopify store, API token, or API calls. The architecture mirrors the Webflow deployer — same dry-run pattern, same gating, same CLI surface.
+
+SuppGO does **not** use Shopify OAuth. Each brand creates a per-store custom app in their Shopify admin and pastes the resulting Admin API access token (`shpat_…`) into SuppGO Settings. The connect route validates the token via a `shop { name }` GraphQL probe before saving it encrypted.
 
 ## Dry-run modes
 
@@ -58,27 +60,21 @@ Coverage:
 - `lib/shopify/client.test.ts` — GraphQL request wrapper, URL builders, shop-domain validation, pagination.
 - `lib/shopify/cms-deployer.test.ts` — `routeContent`, `findProductMatch`, `buildProductMetafields`.
 - `lib/shopify/cms-deployer.dryrun.test.ts` — end-to-end deployer with dry-run adapter; asserts `fetch` is never called.
-- `lib/shopify/oauth.test.ts` — `verifyShopifyHmac` signature verification, including signature tampering and missing-hmac cases.
 
 ## Real Shopify sandbox (optional)
 
-To exercise the live path:
+SuppGO uses Shopify's **Admin API access token** (custom-app token) flow — not OAuth. Each brand creates a custom app inside their own store and pastes the resulting `shpat_…` token into SuppGO. No Shopify Partner app, no public listing, no callback URL.
 
-1. Create a Shopify Partner account at https://partners.shopify.com and spin up a **development store** under that account.
-2. In the Partner dashboard, create a public app (or custom app, if working in a single store). Configure:
-   - **App URL:** `${NEXT_PUBLIC_APP_URL}/settings`
-   - **Allowed redirection URLs:** `${NEXT_PUBLIC_APP_URL}/api/integrations/shopify/callback`
-   - **Scopes:** `read_products,write_products,read_content,write_content,read_themes`
-3. Copy the Client ID + Client Secret into `.env.local`:
-   ```
-   SHOPIFY_API_KEY=<client id>
-   SHOPIFY_API_SECRET=<client secret>
-   SHOPIFY_SCOPES=read_products,write_products,read_content,write_content,read_themes
-   ```
-4. Restart the dev server. Sign in to SuppGO, go to Settings → Connect Shopify, enter the dev store's `*.myshopify.com` domain.
-5. Approve the OAuth scopes. SuppGO redirects back with `?shopify=connected`.
-6. Run an analysis cycle, then click **Apply CMS updates** on the dashboard or report.
-7. Draft articles appear under **Online Store → Blog Posts** (unpublished), draft pages under **Online Store → Pages** (unpublished), and product metafields under each matched product's **Metafields → suppgo** namespace.
+1. Create a Shopify Partner account at https://partners.shopify.com and spin up a **development store** (or use any existing Shopify store you control).
+2. In **Shopify admin → Settings → Apps and sales channels → Develop apps**, click **Create an app**. Name it "SuppGO".
+3. Open **Configuration → Admin API integration → Configure** and grant these scopes:
+   - `read_products`, `write_products`
+   - `read_content`, `write_content`
+4. Click **Install app**, then copy the **Admin API access token** (starts with `shpat_`). It is shown once — save it.
+5. Sign in to SuppGO, go to **Settings → Connect Shopify**, paste the `*.myshopify.com` domain + the `shpat_…` token, click **Connect Shopify**.
+6. SuppGO validates the token by calling `shop { name }` on the GraphQL Admin API, then stores it encrypted.
+7. Run an analysis cycle, then click **Apply CMS updates** on the dashboard or report.
+8. Draft articles appear under **Online Store → Blog Posts** (unpublished), draft pages under **Online Store → Pages** (unpublished), and product metafields under each matched product's **Metafields → suppgo** namespace.
 
 ## One-CMS-at-a-time enforcement
 
@@ -89,9 +85,9 @@ To exercise the live path:
 | Symptom | Cause / fix |
 |---|---|
 | `Shopify is not connected.` | Connect via Settings, or pass `dryRun: true` / set `SUPPGO_CMS_DRY_RUN=1`. |
-| `shopify_invalid_shop` redirect | The `?shop=` param didn't match `^[a-z0-9][a-z0-9-]*\.myshopify\.com$`. Custom domains are not accepted at install time — use the `*.myshopify.com` domain. |
-| `shopify_hmac_invalid` redirect | Callback HMAC didn't verify. Most often: `SHOPIFY_API_SECRET` in `.env.local` doesn't match the Partner app secret. |
-| `shopify_shop_mismatch` redirect | The shop in the callback differs from the shop the user entered at authorize time. Restart the install. |
+| "Enter a valid *.myshopify.com domain." | Domain didn't match `^[a-z0-9][a-z0-9-]*\.myshopify\.com$`. Use the `*.myshopify.com` domain, not your custom storefront domain. |
+| "Admin API access token must start with shpat_..." | Token doesn't look like a custom-app token. Regenerate from **Shopify admin → Apps → Develop apps → SuppGO → API credentials → Install app**. |
+| "Could not reach Shopify with that token" | Token is rejected by Shopify. Confirm the token belongs to the same store as the domain, and that the required scopes are granted. |
 | `No Shopify blog is available.` | Article-type content needs at least one blog. Create one in **Online Store → Blog Posts → Manage blogs**. |
 | `No Shopify product matched ...` | Product matching scored below `MIN_PRODUCT_MATCH_SCORE` (85). Either rename the content's title to match a product handle, or pre-create the product in Shopify. |
 | `Shopify rejected metafield write: ...` | Look at the `userErrors[].message`. Common: metafield definitions haven't been created, or the value exceeds Shopify's 65,535-char limit for `multi_line_text_field`. |

@@ -284,13 +284,32 @@ export default async function DashboardPage() {
         </div>
         <div className="mt-5 flex flex-wrap items-center gap-3 rounded-card border border-sage/12 bg-sage/5 p-4">
           {overview.latestCompletedCycle ? (
-            <CmsDeployButton
-              cycleId={overview.latestCompletedCycle.id}
-              connected={hasCms || dryRunFallback}
-              siteName={cmsSiteName}
-              dryRun={dryRunFallback}
-              provider={activeCmsProvider}
-            />
+            dryRunFallback ? (
+              <>
+                <CmsDeployButton
+                  cycleId={overview.latestCompletedCycle.id}
+                  connected
+                  siteName="Webflow dry-run fixture"
+                  dryRun
+                  provider="webflow"
+                />
+                <CmsDeployButton
+                  cycleId={overview.latestCompletedCycle.id}
+                  connected
+                  siteName="Shopify dry-run fixture"
+                  dryRun
+                  provider="shopify"
+                />
+              </>
+            ) : (
+              <CmsDeployButton
+                cycleId={overview.latestCompletedCycle.id}
+                connected={hasCms}
+                siteName={cmsSiteName}
+                dryRun={false}
+                provider={activeCmsProvider}
+              />
+            )
           ) : null}
           {!hasGitHub ? (
             <a href="/settings#integrations" className="text-xs text-mid underline-offset-2 hover:underline">
