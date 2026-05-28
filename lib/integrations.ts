@@ -4,10 +4,13 @@ import { createClient } from "@/lib/supabase/server";
 import { encryptSecret, decryptSecret } from "@/lib/crypto";
 import type {
   IntegrationRecord,
+  IntegrationType,
   GitHubIntegrationStatus,
   GitHubCredentials,
   WebflowCredentials,
   WebflowIntegrationStatus,
+  ShopifyCredentials,
+  ShopifyIntegrationStatus,
   ContentDeploymentRecord,
   ContentDeploymentStatus,
   CmsDeploymentRunRecord,
@@ -69,7 +72,7 @@ export async function getPublishTargetStatus(brandId: string): Promise<PublishTa
     rows.filter((row) => row.status === "active").map((row) => row.integration_type.toLowerCase()),
   );
 
-  if (activeTypes.has("cms")) {
+  if (activeTypes.has("webflow") || activeTypes.has("shopify") || activeTypes.has("cms")) {
     return { target: "cms", connected: true };
   }
 
@@ -265,13 +268,143 @@ export async function disconnectWebflowIntegration(brandId: string): Promise<voi
 }
 
 // ---------------------------------------------------------------------------
+// Shopify integration helpers
+// ---------------------------------------------------------------------------
+
+const CMS_INTEGRATION_TYPES: IntegrationType[] = ["webflow", "shopify"];
+
+// Removes every CMS integration other than `incoming` for the given brand.
+// Enforces the product rule that a brand can connect to at most one CMS at a time.
+export async function enforceSingleCmsConnection(brandId: string, incoming: IntegrationType): Promise<void> {
+  const toRemove = CMS_INTEGRATION_TYPES.filter((type) => type !== incoming);
+  if (toRemove.length === 0) return;
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("integrations")
+    .delete()
+    .eq("brand_id", brandId)
+    .in("integration_type", toRemove);
+  if (error) {
+    throw new Error(`Failed to clear existing CMS connections: ${error.message}`);
+  }
+}
+
+export async function getShopifyIntegration(brandId: string): Promise<IntegrationRecord | null> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("integrations")
+    .select("*")
+    .eq("brand_id", brandId)
+    .eq("integration_type", "shopify")
+    .maybeSingle();
+  return (data as IntegrationRecord | null) ?? null;
+}
+
+export async function getShopifyIntegrationStatus(brandId: string): Promise<ShopifyIntegrationStatus> {
+  const record = await getShopifyIntegration(brandId);
+  if (!record) {
+    return {
+      connected: false,
+      shop_domain: null,
+      scope: null,
+      blog_id: null,
+      blog_handle: null,
+      status: "disconnected",
+    };
+  }
+  return {
+    connected: record.status === "active",
+    shop_domain: record.credentials.shop_domain ?? null,
+    scope: record.credentials.scope ?? null,
+    blog_id: record.credentials.blog_id ?? null,
+    blog_handle: record.credentials.blog_handle ?? null,
+    status: record.status,
+  };
+}
+
+export async function saveShopifyIntegration(opts: {
+  brandId: string;
+  accessToken: string;
+  shopDomain: string;
+  scope?: string | null;
+}): Promise<void> {
+  await enforceSingleCmsConnection(opts.brandId, "shopify");
+  const supabase = createClient();
+  const credentials: ShopifyCredentials = {
+    access_token_enc: encryptSecret(opts.accessToken),
+    shop_domain: opts.shopDomain,
+    scope: opts.scope ?? null,
+    blog_id: null,
+    blog_handle: null,
+  };
+
+  const { error } = await supabase.from("integrations").upsert(
+    {
+      brand_id: opts.brandId,
+      integration_type: "shopify",
+      credentials,
+      status: "active",
+    },
+    { onConflict: "brand_id,integration_type" },
+  );
+
+  if (error) {
+    throw new Error(`Failed to save Shopify integration: ${error.message}`);
+  }
+}
+
+export async function updateShopifyShopConfig(opts: {
+  brandId: string;
+  shopDomain: string;
+  blogId: string | null;
+  blogHandle: string | null;
+}): Promise<void> {
+  const record = await getShopifyIntegration(opts.brandId);
+  if (!record) {
+    throw new Error("Shopify integration not found.");
+  }
+
+  const credentials: ShopifyCredentials = {
+    access_token_enc: record.credentials.access_token_enc,
+    shop_domain: opts.shopDomain,
+    scope: record.credentials.scope ?? null,
+    blog_id: opts.blogId,
+    blog_handle: opts.blogHandle,
+  };
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("integrations")
+    .update({ credentials, last_sync_at: new Date().toISOString() })
+    .eq("brand_id", opts.brandId)
+    .eq("integration_type", "shopify");
+
+  if (error) {
+    throw new Error(`Failed to update Shopify config: ${error.message}`);
+  }
+}
+
+export async function disconnectShopifyIntegration(brandId: string): Promise<void> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("integrations")
+    .delete()
+    .eq("brand_id", brandId)
+    .eq("integration_type", "shopify");
+
+  if (error) {
+    throw new Error(`Failed to disconnect Shopify integration: ${error.message}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Content deployment helpers
 // ---------------------------------------------------------------------------
 
 export async function recordContentDeployment(opts: {
   contentId: string;
   brandId: string;
-  integrationType: "github" | "webflow";
+  integrationType: "github" | "webflow" | "shopify";
   externalUrl: string;
   status: ContentDeploymentStatus;
   deploymentRunId?: string | null;
@@ -319,7 +452,7 @@ export async function recordContentDeployment(opts: {
 export async function createCmsDeploymentRun(opts: {
   cycleId: string;
   brandId: string;
-  integrationType: "webflow";
+  integrationType: "webflow" | "shopify";
 }): Promise<CmsDeploymentRunRecord> {
   const supabase = createClient();
   const { data, error } = await supabase
@@ -399,7 +532,7 @@ export async function updateCmsDeploymentRun(
         id: runId,
         cycle_id: "",
         brand_id: "",
-        integration_type: "webflow",
+        integration_type: "webflow" as IntegrationType,
         status: patch.status,
         created_count: patch.createdCount ?? 0,
         updated_count: patch.updatedCount ?? 0,

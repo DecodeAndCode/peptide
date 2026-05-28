@@ -133,7 +133,7 @@ export interface ReportRecord {
 
 // --- Integrations ---
 
-export type IntegrationType = "github" | "webflow";
+export type IntegrationType = "github" | "webflow" | "shopify";
 export type IntegrationStatus = "active" | "error" | "disconnected";
 export type ContentDeploymentStatus = "pending" | "deployed" | "failed";
 export type CmsDeploymentRunStatus = "pending" | "running" | "completed" | "partial_success" | "failed";
@@ -161,6 +161,14 @@ export interface WebflowCredentials {
   preview_url: string | null;
 }
 
+export interface ShopifyCredentials {
+  access_token_enc: string;
+  shop_domain: string;
+  scope: string | null;
+  blog_id: string | null;
+  blog_handle: string | null;
+}
+
 export interface IntegrationCredentials {
   access_token_enc: string;
   repo_full_name?: string | null;
@@ -170,6 +178,10 @@ export interface IntegrationCredentials {
   site_id?: string | null;
   site_name?: string | null;
   preview_url?: string | null;
+  shop_domain?: string | null;
+  scope?: string | null;
+  blog_id?: string | null;
+  blog_handle?: string | null;
 }
 
 export interface IntegrationRecord {
@@ -198,10 +210,26 @@ export interface WebflowIntegrationStatus {
   status: IntegrationStatus;
 }
 
+export interface ShopifyIntegrationStatus {
+  connected: boolean;
+  shop_domain: string | null;
+  scope: string | null;
+  blog_id: string | null;
+  blog_handle: string | null;
+  status: IntegrationStatus;
+}
+
 export interface CmsDeploymentPreviewLink {
   label: string;
   url: string;
-  type: "site_preview" | "cms_item" | "webflow_dashboard";
+  type:
+    | "site_preview"
+    | "cms_item"
+    | "webflow_dashboard"
+    | "shopify_admin"
+    | "shopify_product"
+    | "shopify_article"
+    | "shopify_page";
 }
 
 export interface CmsDeploymentRunRecord {

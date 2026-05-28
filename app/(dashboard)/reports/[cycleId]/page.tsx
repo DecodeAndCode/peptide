@@ -10,7 +10,11 @@ import { Card } from "@/components/ui/Card";
 import { InfoHint } from "@/components/ui/InfoHint";
 import { getCycleReportData } from "@/lib/dashboard";
 import { formatRoundedValue, formatSignedRoundedValue } from "@/lib/formatting";
-import { getPublishTargetStatus, getWebflowIntegrationStatus } from "@/lib/integrations";
+import {
+  getPublishTargetStatus,
+  getShopifyIntegrationStatus,
+  getWebflowIntegrationStatus,
+} from "@/lib/integrations";
 import { getGeneratedContentDisplay } from "@/lib/suppgo";
 
 function formatDelta(value: number | null) {
@@ -34,8 +38,15 @@ export default async function CycleReportPage({
 
   const siteSignals = report.latestSiteAnalysis?.content_signals;
   const webflowIntegration = await getWebflowIntegrationStatus(report.brand.id);
+  const shopifyIntegration = await getShopifyIntegrationStatus(report.brand.id);
   const publishTarget = await getPublishTargetStatus(report.brand.id);
-  const dryRunFallback = !webflowIntegration.connected && process.env.SUPPGO_TEST_MODE === "true";
+  const activeCmsProvider: "webflow" | "shopify" =
+    shopifyIntegration.connected && !webflowIntegration.connected ? "shopify" : "webflow";
+  const cmsConnected =
+    activeCmsProvider === "shopify" ? shopifyIntegration.connected : webflowIntegration.connected;
+  const cmsSiteName =
+    activeCmsProvider === "shopify" ? shopifyIntegration.shop_domain : webflowIntegration.site_name;
+  const dryRunFallback = !cmsConnected && process.env.SUPPGO_TEST_MODE === "true";
   const detectedSignals = Array.from(
     new Set([...(siteSignals?.productNames ?? []), ...(siteSignals?.ingredients ?? [])].map((item) => item.trim())),
   )
@@ -86,9 +97,10 @@ export default async function CycleReportPage({
           </div>
           <CmsDeployButton
             cycleId={report.cycle.id}
-            connected={webflowIntegration.connected || dryRunFallback}
-            siteName={webflowIntegration.site_name}
+            connected={cmsConnected || dryRunFallback}
+            siteName={cmsSiteName}
             dryRun={dryRunFallback}
+            provider={activeCmsProvider}
           />
         </div>
         <div className="mt-6">

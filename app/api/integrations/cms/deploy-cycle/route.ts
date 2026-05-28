@@ -4,11 +4,12 @@ import { createClient } from "@/lib/supabase/server";
 import { enforceSameOrigin } from "@/lib/security";
 import { deployCycleToWebflow } from "@/lib/webflow/cms-deployer";
 import { isDryRunAllowedInProduction } from "@/lib/webflow/adapter";
-import type { BrandRecord, GeneratedContentRecord } from "@/types";
+import { deployCycleToShopify } from "@/lib/shopify/cms-deployer";
+import type { BrandRecord, CmsDeploymentRunRecord, GeneratedContentRecord } from "@/types";
 
 const deployCycleSchema = z.object({
   cycle_id: z.string().uuid("Invalid cycle ID."),
-  provider: z.literal("webflow"),
+  provider: z.enum(["webflow", "shopify"]),
   dry_run: z.boolean().optional(),
 });
 
@@ -70,12 +71,18 @@ export async function POST(request: Request) {
     dryRunRequested && (process.env.NODE_ENV !== "production" || isDryRunAllowedInProduction());
 
   try {
-    const run = await deployCycleToWebflow({
+    const deployArgs = {
       brand: brand as BrandRecord,
       cycleId: parsed.data.cycle_id,
       content: content as GeneratedContentRecord[],
       dryRun: dryRunPermitted,
-    });
+    };
+    let run: CmsDeploymentRunRecord;
+    if (parsed.data.provider === "shopify") {
+      run = await deployCycleToShopify(deployArgs);
+    } else {
+      run = await deployCycleToWebflow(deployArgs);
+    }
     return NextResponse.json({ ok: run.status !== "failed", deployment: run });
   } catch (err) {
     const message = err instanceof Error ? err.message : "CMS deployment failed.";
