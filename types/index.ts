@@ -10,6 +10,13 @@ export type InfluencerOutreachStatus =
   | "responded"
   | "partnered"
   | "archived";
+export type PartnerCategory = "gym" | "apparel" | "retailer" | "other";
+export type PartnerOutreachStatus =
+  | "not_contacted"
+  | "contacted"
+  | "responded"
+  | "partnered"
+  | "archived";
 export type PromptCategory =
   | "explicit_recommendation"
   | "problem_solution"
@@ -225,6 +232,25 @@ export interface CycleRunSummary {
   mentionCount: number;
   visibilityScore: number;
   testModeApplied: boolean;
+}
+
+export interface PartnerMatchRecord {
+  id: string;
+  brand_id: string;
+  cycle_id: string | null;
+  partner_type: PartnerCategory;
+  name: string;
+  website_url: string | null;
+  region: string | null;
+  match_reason: string | null;
+  outreach_message: string | null;
+  source_urls: string[];
+  fit_score: number | null;
+  outreach_status: PartnerOutreachStatus | null;
+  outreach_notes: string | null;
+  last_outreach_at: string | null;
+  shown_in_cycle: number[];
+  created_at: string;
 }
 
 export interface IndustryOption {
